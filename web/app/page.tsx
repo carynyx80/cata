@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Slab } from "@/components/Slab";
 import { Reveal } from "@/components/Reveal";
 import { cards, fmt } from "@/lib/data";
+import { useCata } from "@/components/web3/Providers";
 
 const fan = [
   { c: cards[1], r: -14, x: -150, y: 30, z: 1 },
@@ -19,6 +20,7 @@ const steps = [
 ];
 
 export default function Home() {
+  const { active: cataLive } = useCata();
   return (
     <>
       {/* hero */}
@@ -122,7 +124,7 @@ export default function Home() {
           <div className="h-full rounded-[40px] bg-ink p-8 text-surface md:p-12">
             <p className="font-mono text-xs uppercase tracking-[.2em] text-soft">prediction markets</p>
             <h2 className="mt-4 font-display text-[clamp(2rem,4vw,3.2rem)] leading-[1]">bet on the rip.</h2>
-            <p className="mt-4 max-w-md text-surface/70">parimutuel pools on live rips, pack pools and card prices. bnb, usdt — and $cata soon.</p>
+            <p className="mt-4 max-w-md text-surface/70">parimutuel pools on live rips, pack pools and card prices. bnb, usdt — and {cataLive ? "$cata." : "$cata soon."}</p>
             <div className="mt-8 space-y-3">
               {[["charizard pulled from grail pool this week?", 62], ["umbreon alt art psa 10 above $1,800 by dec 31?", 38]].map(([q, p]) => (
                 <div key={q as string} className="rounded-2xl bg-surface/5 p-4 transition hover:bg-surface/10">
@@ -157,7 +159,7 @@ export default function Home() {
             <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-deep blur-2xl" />
             <div className="relative grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-end">
               <div>
-                <p className="font-mono text-xs uppercase tracking-[.2em] text-soft">$cata · coming soon</p>
+                <p className="font-mono text-xs uppercase tracking-[.2em] text-soft">{cataLive ? "$cata · live" : "$cata · coming soon"}</p>
                 <h2 className="mt-4 font-display text-[clamp(2.4rem,6vw,5rem)] leading-[.95]">every move burns.</h2>
                 <p className="mt-5 max-w-lg text-lg text-surface/85">0.2% of every transaction on cata — packs, trades, loans, bets — goes to a treasury that buys back $cata on pancakeswap and sends it to the dead address. no team cut.</p>
               </div>

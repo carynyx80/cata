@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Logo } from "./Logo";
 import { mainLinks, moreLinks } from "@/lib/nav";
+import { CataPill, ConnectButton } from "./web3/ConnectButton";
 
 export function Nav() {
   const path = usePathname();
@@ -58,10 +59,8 @@ export function Nav() {
           <span className="hidden items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 font-mono text-[11px] text-muted md:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-[#F0B90B]" /> bnb chain
           </span>
-          <Link href="/token" className="hidden rounded-full bg-soft px-3 py-1 font-mono text-[11px] text-deep md:block">$cata soon</Link>
-          <button className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-surface transition-all hover:-translate-y-0.5 hover:bg-deep active:translate-y-0">
-            connect<span className="hidden sm:inline"> wallet</span>
-          </button>
+          <CataPill className="hidden rounded-full bg-soft px-3 py-1 font-mono text-[11px] text-deep md:block" />
+          <ConnectButton />
           <button onClick={() => setMobile(!mobile)} aria-label="menu" aria-expanded={mobile}
             className="flex h-10 w-10 flex-col items-center justify-center gap-1.5 rounded-full border border-ink/15 lg:hidden">
             <motion.span animate={mobile ? { rotate: 45, y: 4 } : { rotate: 0, y: 0 }} className="block h-0.5 w-4 rounded bg-ink" />
@@ -89,7 +88,7 @@ export function Nav() {
               </div>
               <div className="mt-6 flex gap-2 font-mono text-[11px] text-muted">
                 <span className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1"><span className="h-1.5 w-1.5 rounded-full bg-[#F0B90B]" /> bnb chain</span>
-                <span className="rounded-full bg-soft px-3 py-1 text-deep">$cata soon</span>
+                <CataPill className="rounded-full bg-soft px-3 py-1 text-deep" />
               </div>
             </div>
           </motion.div>

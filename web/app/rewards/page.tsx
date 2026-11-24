@@ -1,18 +1,37 @@
 "use client";
 import { motion } from "framer-motion";
 import { Reveal } from "@/components/Reveal";
+import { useAccount, useReadContract } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
 import { Page, PageHead, Stat } from "@/components/ui";
+import { useCata } from "@/components/web3/Providers";
+import { cataPointsAbi } from "@/lib/abis";
+import { addresses } from "@/lib/contracts";
+import { api } from "@/lib/api";
 
 const sets = [["base set holo trio", 2, 3, 500], ["eeveelution alt arts", 5, 8, 1200], ["op-01 leaders", 3, 9, 600], ["prizm rookie class '23", 1, 5, 800]] as const;
 const earn = [["open a pack", "+10 / $1"], ["complete a set", "bonus shown per set"], ["sell on market", "+2 / $1"], ["win a prediction", "+5 / $1"]];
 
+/** CataPoints.points(address) on-chain, else backend /points/:wallet, else the sample number. */
+function usePoints() {
+  const { address } = useAccount();
+  const chain = useReadContract({ address: addresses.points, abi: cataPointsAbi, functionName: "points", args: address ? [address] : undefined, query: { enabled: !!addresses.points && !!address } });
+  const backend = useQuery({ queryKey: ["points", address], enabled: !!address && !addresses.points, queryFn: () => api<{ points: string }>(`/points/${address}`), retry: 1 });
+  if (!address) return null;
+  if (chain.data !== undefined) return Number(chain.data as bigint);
+  if (backend.data) return Number(backend.data.points);
+  return null;
+}
+
 export default function Rewards() {
+  const pts = usePoints();
+  const { active } = useCata();
   return (
     <Page>
       <PageHead kicker="rewards" title="collect, get paid." sub="earn cata points for ripping and completing sets.">
-        <div className="flex gap-3"><Stat k="points" v="12,340" dark /><Stat k="rank" v="top 8%" /></div>
+        <div className="flex gap-3"><Stat k="points" v={pts !== null ? pts.toLocaleString("en-US") : "12,340"} dark />{pts === null && <Stat k="rank" v="top 8%" />}</div>
       </PageHead>
-      <div className="mt-8 rounded-full bg-soft px-5 py-3 font-mono text-xs text-deep">✦ points become $cata after launch — paid from buybacks.</div>
+      <div className="mt-8 rounded-full bg-soft px-5 py-3 font-mono text-xs text-deep">{active ? "✦ $cata is live — points convert to $cata, paid from buybacks." : "✦ points become $cata after launch — paid from buybacks."}</div>
       <div className="mt-10 grid gap-5 md:grid-cols-2">
         {sets.map(([n, have, of, pts], i) => (
           <Reveal key={n} delay={(i % 2) * .06}>

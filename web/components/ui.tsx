@@ -1,7 +1,10 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { useAccount } from "wagmi";
 import { Reveal } from "./Reveal";
+import { useCata, useWalletUi } from "./web3/Providers";
+import { api } from "@/lib/api";
 
 export function PageHead({ kicker, title, sub, children }: { kicker: string; title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
   return (
@@ -43,16 +46,42 @@ export function Toggle<T extends string>({ options, value, onChange, disabled = 
   );
 }
 
-export function PayToggle({ value, onChange, id = "pay", size }: { value: Pay; onChange: (v: Pay) => void; id?: string; size?: "sm" | "md" }) {
-  return <Toggle options={pays} value={value} onChange={onChange} disabled={["$cata"]} id={id} size={size} />;
+/** bnb · usdt · $cata — $cata unlocks once CataConfig.cataToken() is set (pass noCata where a contract never takes it). */
+export function PayToggle({ value, onChange, id = "pay", size, noCata = false }: { value: Pay; onChange: (v: Pay) => void; id?: string; size?: "sm" | "md"; noCata?: boolean }) {
+  const { active } = useCata();
+  return <Toggle options={pays} value={value} onChange={onChange} disabled={active && !noCata ? [] : ["$cata"]} id={id} size={size} />;
 }
 
-export function WantButton({ count, className = "" }: { count: number; className?: string }) {
+/** Want toggle. With a backend card id, POST/DELETE /cards/:id/want using the connected wallet. */
+export function WantButton({ count, className = "", cardId }: { count: number; className?: string; cardId?: string }) {
   const [on, setOn] = useState(false);
+  const [n, setN] = useState<number | null>(null);
+  const { address } = useAccount();
+  const { openConnect } = useWalletUi();
+  useEffect(() => {
+    if (!cardId || !address) return;
+    let live = true;
+    api<{ wants: number; wanted?: boolean }>(`/cards/${encodeURIComponent(cardId)}/wants?wallet=${address}`)
+      .then((r) => { if (live) { setN(r.wants); setOn(!!r.wanted); } }).catch(() => {});
+    return () => { live = false; };
+  }, [cardId, address]);
+  const toggle = async () => {
+    if (!cardId) return setOn(!on);
+    if (!address) return openConnect();
+    const next = !on;
+    setOn(next);
+    try {
+      const r = await api<{ wants: number }>(`/cards/${encodeURIComponent(cardId)}/want`, {
+        method: next ? "POST" : "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: address }),
+      });
+      setN(r.wants);
+    } catch { /* offline: keep the optimistic state */ }
+  };
+  const shown = n ?? count + (on ? 1 : 0);
   return (
-    <motion.button type="button" whileTap={{ scale: .92 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOn(!on); }}
+    <motion.button type="button" whileTap={{ scale: .92 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(); }}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-xs transition ${on ? "bg-pink text-surface" : "border border-ink/15 bg-surface text-ink hover:border-pink hover:text-pink"} ${className}`}>
-      <span>{on ? "♥" : "♡"}</span> want · {(count + (on ? 1 : 0)).toLocaleString("en-US")}
+      <span>{on ? "♥" : "♡"}</span> want · {shown.toLocaleString("en-US")}
     </motion.button>
   );
 }

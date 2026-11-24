@@ -1,8 +1,17 @@
 "use client";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { Slab } from "@/components/Slab";
 import { Reveal } from "@/components/Reveal";
+import { Act } from "@/components/web3/Act";
+import { useTx } from "@/components/web3/tx";
+import { PackReveal, type Pending } from "@/components/web3/PackReveal";
+import { readContract } from "wagmi/actions";
+import { decodeEventLog, parseUnits, type Abi } from "viem";
+import { packMachineAbi } from "@/lib/abis";
+import { addresses, payToken } from "@/lib/contracts";
+import { api, type ApiPool } from "@/lib/api";
 import { cards, fmt } from "@/lib/data";
 
 const tiers = [
@@ -12,8 +21,46 @@ const tiers = [
 ];
 const pays = ["bnb", "usdt", "$cata"] as const;
 
+/** Match a tier to a backend/on-chain pool by name, else by position. */
+const poolFor = (pools: ApiPool[] | undefined, name: string, i: number) =>
+  pools?.find((p) => p.name.toLowerCase().includes(name)) ?? pools?.[i];
+
 export default function Packs() {
   const [pay, setPay] = useState<(typeof pays)[number]>("bnb");
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const { run, config } = useTx();
+  const pools = useQuery({ queryKey: ["pools"], queryFn: () => api<{ items: ApiPool[] } | ApiPool[]>("/pools"), retry: 1, staleTime: 30_000 });
+  const poolList = Array.isArray(pools.data) ? pools.data : pools.data?.items;
+  const onchain = poolList?.some((p) => p.source === "chain");
+
+  const openPack = async (name: string, i: number, shownPrice: number) => {
+    const pm = addresses.packMachine!;
+    const pool = poolFor(onchain ? poolList : undefined, name, i);
+    const poolId = BigInt(pool?.id ?? i);
+    const token = payToken(pay)!;
+    // send maxPriceUsd = displayed price + 1% buffer (contract reverts if the pool price moved above it)
+    const maxPriceUsd = parseUnits((shownPrice * 1.01).toFixed(6), 18);
+    setOpening(name);
+    try {
+      const quote = (await readContract(config, { address: pm, abi: packMachineAbi, functionName: "quote", args: [poolId, token] })) as bigint;
+      const buffered = (quote * 101n) / 100n; // bnb excess is refunded
+      const receipt = await run(`open ${name} pack`, {
+        address: pm, abi: packMachineAbi as Abi, functionName: "open", args: [poolId, token, maxPriceUsd], value: pay === "bnb" ? buffered : undefined,
+      }, pay === "bnb" ? {} : { approve: { token, amount: quote } });
+      let creditId: bigint | undefined, requestId: bigint | undefined;
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== pm.toLowerCase()) continue;
+        try {
+          const ev = decodeEventLog({ abi: packMachineAbi, data: log.data, topics: log.topics });
+          if (ev.eventName === "OpenRequested") { creditId = ev.args.creditId; requestId = ev.args.requestId; }
+        } catch { /* other event */ }
+      }
+      if (creditId !== undefined) setPending({ creditId, requestId, pool: name, fromBlock: receipt.blockNumber });
+    } catch { /* toast already shown */ } finally {
+      setOpening(null);
+    }
+  };
   return (
     <div className="mx-auto max-w-7xl px-4 pt-16 md:px-8">
       <Reveal>
@@ -36,12 +83,16 @@ export default function Packs() {
       </div>
 
       <div className="mt-8 grid gap-5 lg:grid-cols-3">
-        {tiers.map((t, i) => (
+        {tiers.map((t, i) => {
+          const pool = poolFor(onchain ? poolList : undefined, t.name, i);
+          const price = pool?.priceUsd ?? t.price;
+          const left = pool?.cardsLeft ?? t.left;
+          return (
           <Reveal key={t.name} delay={i * .08}>
             <div className={`group relative h-full rounded-[36px] p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_40px_70px_-35px_rgba(43,26,34,.5)] ${t.tone}`}>
               {t.hot && <span className="absolute right-6 top-6 rounded-full bg-pink px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-surface">most ripped</span>}
               <div className="font-mono text-xs uppercase tracking-[.2em] opacity-70">{t.name}</div>
-              <div className="mt-6 font-display text-6xl">${t.price}</div>
+              <div className="mt-6 font-display text-6xl">${price.toLocaleString("en-US")}</div>
               <div className="mt-1 font-mono text-xs opacity-60">paid in {pay} · +0.2% burn fee</div>
               <table className="mt-8 w-full font-mono text-sm">
                 <thead><tr className="text-left text-[10px] uppercase tracking-widest opacity-60"><th className="pb-2 font-normal">pull value</th><th className="pb-2 text-right font-normal">odds</th></tr></thead>
@@ -49,13 +100,15 @@ export default function Packs() {
                   <tr key={v} className="border-t border-current/10"><td className="py-2.5">{v}</td><td className="py-2.5 text-right">{o}</td></tr>
                 ))}</tbody>
               </table>
-              <div className="mt-6 font-mono text-xs opacity-70">{t.left} cards left in pool</div>
-              <button className={`mt-6 w-full rounded-full py-4 text-lg font-medium transition ${t.name === "grail" ? "bg-pink text-surface hover:bg-surface hover:text-ink" : "bg-ink text-surface hover:bg-pink"}`}>
+              <div className="mt-6 font-mono text-xs opacity-70">{left} cards left in pool</div>
+              <Act need={["packMachine", "vault"]} onClick={() => openPack(t.name, i, price)} busy={opening === t.name} busyLabel="opening…" disabled={!!opening}
+                className={`mt-6 w-full rounded-full py-4 text-lg font-medium transition ${t.name === "grail" ? "bg-pink text-surface hover:bg-surface hover:text-ink" : "bg-ink text-surface hover:bg-pink"}`}>
                 open {t.name} pack
-              </button>
+              </Act>
             </div>
           </Reveal>
-        ))}
+          );
+        })}
       </div>
 
       <section className="mt-24">
@@ -77,6 +130,7 @@ export default function Packs() {
           ))}
         </div>
       </section>
+      <PackReveal key={pending ? String(pending.creditId) : "none"} pending={pending} onClose={() => setPending(null)} />
     </div>
   );
 }

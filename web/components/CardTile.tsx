@@ -20,7 +20,7 @@ export function CardTile({ c }: { c: CatalogCard }) {
             <div key={k}><div className="text-[9px] uppercase tracking-widest text-muted">{k}</div><div className="text-[13px]">{fmt(v)}</div></div>
           ))}
         </div>
-        <div className="mt-3"><WantButton count={c.wants} /></div>
+        <div className="mt-3"><WantButton count={c.wants} cardId={c.apiId} /></div>
       </div>
     </Link>
   );

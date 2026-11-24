@@ -20,7 +20,7 @@ export function CardDetail({ c }: { c: CatalogCard }) {
             <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">{c.game} · {c.set}</p>
             <h1 className="mt-3 font-display text-[clamp(2.2rem,5vw,4rem)] leading-[1]">{c.name}</h1>
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <WantButton count={c.wants} />
+              <WantButton count={c.wants} cardId={c.apiId} />
               {c.inVault && <span className="rounded-full bg-ink px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-surface">in vault</span>}
             </div>
           </Reveal>
@@ -49,7 +49,7 @@ export function CardDetail({ c }: { c: CatalogCard }) {
               <Link href="/packs" className={btnPink}>open packs with this card →</Link>
               <Link href="/market" className={btnLine}>find it on the market</Link>
             </div>
-            <p className="mt-4 font-mono text-[11px] text-muted">prices from the cata price index · sample data</p>
+            <p className="mt-4 font-mono text-[11px] text-muted">prices from the cata price index{c.apiId ? "" : " · sample data"}</p>
           </Reveal>
         </div>
       </div>

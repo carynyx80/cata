@@ -4,18 +4,36 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Reveal } from "@/components/Reveal";
 import { Page, PageHead, btnPink, btnLine } from "@/components/ui";
 import { fmt } from "@/lib/data";
+import { api, ApiError, type ApiScan } from "@/lib/api";
 
-const mock = { match: "charizard holo", set: "base set 1999 · #4/102", confidence: 0.94, grade: "8–9", price: 4200 };
+type Result = { match: string; set: string; confidence: number; grade: string; price: number | null; cardId?: string };
 
 export default function Scan() {
   const [img, setImg] = useState<string | null>(null);
-  const [state, setState] = useState<"idle" | "scanning" | "done">("idle");
+  const [state, setState] = useState<"idle" | "scanning" | "done" | "off" | "error">("idle");
+  const [res, setRes] = useState<Result | null>(null);
+  const [err, setErr] = useState("");
   const [drag, setDrag] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  // POST /scan (multipart). 503 = no model key configured yet → "ai scan switches on soon"
+  const scan = async (f: File) => {
+    const body = new FormData();
+    body.append("image", f);
+    try {
+      const r = await api<ApiScan>("/scan", { method: "POST", body, timeoutMs: 60_000 });
+      const m = r.matches[0];
+      if (!m) { setErr("no match — try a sharper photo of the front."); setState("error"); return; }
+      setRes({ match: m.name.toLowerCase(), set: m.set.toLowerCase(), confidence: m.confidence, grade: r.estimatedGrade ? `~${r.estimatedGrade}` : "—", price: r.priceUsd, cardId: m.cardId });
+      setState("done");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) setState("off");
+      else { setErr(e instanceof ApiError && e.status === 413 ? "that photo is too big — max 5 mb." : "scan failed — try again in a moment."); setState("error"); }
+    }
+  };
   const load = (f?: File) => {
     if (!f || !f.type.startsWith("image/")) return;
     const r = new FileReader();
-    r.onload = () => { setImg(String(r.result)); setState("scanning"); setTimeout(() => setState("done"), 1400); };
+    r.onload = () => { setImg(String(r.result)); setState("scanning"); scan(f); };
     r.readAsDataURL(f);
   };
   return (
@@ -38,7 +56,7 @@ export default function Scan() {
                 <div className="mt-1 text-muted">or tap to upload · front of card, good light</div>
               </div>
             )}
-            {state === "scanning" && <motion.div className="absolute inset-x-6 h-1 rounded-full bg-pink shadow-[0_0_20px_#E2487F]" initial={{ top: "8%" }} animate={{ top: ["8%", "90%", "8%"] }} transition={{ duration: 1.4, ease: "easeInOut" }} />}
+            {state === "scanning" && <motion.div className="absolute inset-x-6 h-1 rounded-full bg-pink shadow-[0_0_20px_#E2487F]" initial={{ top: "8%" }} animate={{ top: ["8%", "90%", "8%"] }} transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity }} />}
           </div>
         </Reveal>
         <Reveal delay={.06}>
@@ -48,25 +66,28 @@ export default function Scan() {
               <span className="rounded-full bg-surface/10 px-3 py-1 font-mono text-[10px] text-soft">✦ powered by ai · estimates only</span>
             </div>
             <AnimatePresence mode="wait">
-              {state === "done" ? (
+              {state === "done" && res ? (
                 <motion.div key="r" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                  <h3 className="mt-6 font-display text-3xl">{mock.match}</h3>
-                  <div className="font-mono text-xs text-surface/60">{mock.set}</div>
+                  <h3 className="mt-6 font-display text-3xl">{res.match}</h3>
+                  <div className="font-mono text-xs text-surface/60">{res.set}</div>
                   <div className="mt-6 grid grid-cols-3 gap-3 font-mono">
-                    {[["match", `${Math.round(mock.confidence * 100)}%`], ["est. grade", mock.grade], ["est. price", fmt(mock.price)]].map(([k, v]) => (
+                    {[["match", `${Math.round(res.confidence * 100)}%`], ["est. grade", res.grade], ["est. price", res.price ? fmt(Math.round(res.price)) : "—"]].map(([k, v]) => (
                       <div key={k} className="rounded-2xl bg-surface/5 p-3"><div className="text-[10px] uppercase tracking-widest text-surface/50">{k}</div><div className="mt-1 text-xl">{v}</div></div>
                     ))}
                   </div>
-                  <div className="mt-4 h-1.5 rounded-full bg-surface/10"><motion.div className="h-full rounded-full bg-pink" initial={{ width: 0 }} animate={{ width: `${mock.confidence * 100}%` }} transition={{ duration: .8 }} /></div>
+                  <div className="mt-4 h-1.5 rounded-full bg-surface/10"><motion.div className="h-full rounded-full bg-pink" initial={{ width: 0 }} animate={{ width: `${res.confidence * 100}%` }} transition={{ duration: .8 }} /></div>
                   <div className="mt-8 flex flex-wrap gap-3">
-                    <button className={btnPink}>sell to cata</button>
+                    {res.cardId ? <a href={`/catalog/${encodeURIComponent(res.cardId)}`} className={btnPink}>see prices →</a> : <button className={btnPink}>sell to cata</button>}
                     <button className={`${btnLine} border-surface text-surface hover:bg-surface hover:text-ink`}>ship to vault</button>
                   </div>
                   <p className="mt-5 text-xs text-surface/50">ai grades are estimates. the final grade comes from psa, bgs or cgc once the card is in hand.</p>
                 </motion.div>
               ) : (
                 <motion.div key="e" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-16 text-center text-surface/50">
-                  {state === "scanning" ? "reading the card…" : "your match, grade estimate and price show up here."}
+                  {state === "scanning" ? "reading the card…"
+                    : state === "off" ? <><span className="font-display text-2xl text-surface">ai scan switches on soon.</span><br /><span className="mt-2 inline-block">we&apos;re wiring up the model — check back shortly.</span></>
+                    : state === "error" ? err
+                    : "your match, grade estimate and price show up here."}
                 </motion.div>
               )}
             </AnimatePresence>
