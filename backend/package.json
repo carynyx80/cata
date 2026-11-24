@@ -1,0 +1,34 @@
+{
+  "name": "cata-backend",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "ingest": "tsx src/ingest/run.ts",
+    "push-prices": "tsx src/jobs/pushPrices.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.13.0",
+    "@hono/node-server": "^2.1.11",
+    "hono": "^4.13.21",
+    "viem": "^2.58.6",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.1"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.5"
+  }
+}

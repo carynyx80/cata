@@ -1,0 +1,4 @@
+{"object":"list","has_more":false,"data":[
+ {"object":"card","id":"bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd","name":"Black Lotus","set":"lea","set_name":"Limited Edition Alpha","collector_number":"232","rarity":"rare","image_uris":{"normal":"https://cards.scryfall.io/normal/front/b/d/bd8f.jpg","large":"https://cards.scryfall.io/large/front/b/d/bd8f.jpg"},"prices":{"usd":"38500.00","usd_foil":null,"eur":null}},
+ {"object":"card","id":"0e5a-dfc","name":"Delver of Secrets // Insectile Aberration","set":"isd","set_name":"Innistrad","collector_number":"51","rarity":"common","card_faces":[{"image_uris":{"normal":"https://cards.scryfall.io/normal/front/a.jpg"}},{"image_uris":{"normal":"https://cards.scryfall.io/normal/back/a.jpg"}}],"prices":{"usd":null,"usd_foil":"12.40"}}
+]}

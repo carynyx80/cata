@@ -1,0 +1,9 @@
+{"submissions":[
+ {"year":1986,"brand":"Fleer","number":"57","player":"Michael Jordan","rarity":"Base RC","grade":"psa9","priceUsd":9400,"soldAt":"2026-11-01T00:00:00.000Z"},
+ {"year":2018,"brand":"Panini Prizm","number":"280","player":"Luka Doncic","variant":"Silver"}
+],
+"sales":[
+ {"cardId":"sports:1986-fleer-57","grade":"psa9","priceUsd":9800,"soldAt":"2026-11-15T00:00:00.000Z"},
+ {"cardId":"sports:1986-fleer-57","grade":"psa10","priceUsd":158000,"soldAt":"2026-11-10T00:00:00.000Z"},
+ {"cardId":"sports:unknown","grade":"raw","priceUsd":1,"soldAt":"2026-11-10T00:00:00.000Z"}
+]}

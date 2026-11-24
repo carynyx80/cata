@@ -1,0 +1,4 @@
+[
+ {"inventory_price":350.0,"market_price":312.45,"card_name":"Shanks (Alternate Art)","set_name":"Romance Dawn","card_text":"","set_id":"OP-01","rarity":"SEC","card_set_id":"OP01-120","card_color":"Red","card_type":"Character","card_image_id":"OP01-120_p1","card_image":"https://optcgapi.com/media/static/Card_Images/OP01-120_p1.jpg","date_scraped":"2026-11-19"},
+ {"inventory_price":"0.35","market_price":null,"card_name":"Monkey.D.Luffy","set_name":"-Starter Deck 1: Straw Hat Crew-","rarity":"L","card_set_id":"ST01-001","card_image_id":"ST01-001","card_image":"https://optcgapi.com/media/static/Card_Images/ST01-001.jpg"}
+]

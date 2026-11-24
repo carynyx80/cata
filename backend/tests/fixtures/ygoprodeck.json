@@ -1,0 +1,8 @@
+{"data":[
+ {"id":89631139,"name":"Blue-Eyes White Dragon","type":"Normal Monster","card_sets":[
+   {"set_name":"Legend of Blue Eyes White Dragon","set_code":"LOB-001","set_rarity":"Ultra Rare","set_price":"162.35"},
+   {"set_name":"Starter Deck: Kaiba","set_code":"SDK-001","set_rarity":"Ultra Rare","set_price":"0"}],
+  "card_images":[{"id":89631139,"image_url":"https://images.ygoprodeck.com/images/cards/89631139.jpg"}],
+  "card_prices":[{"tcgplayer_price":"1.98","cardmarket_price":"0.31"}]},
+ {"id":12345678,"name":"Token Card","card_images":[{"image_url":"https://images.ygoprodeck.com/images/cards/12345678.jpg"}],"card_prices":[{"tcgplayer_price":"0.00"}]}
+]}
