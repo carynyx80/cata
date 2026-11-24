@@ -37,8 +37,9 @@ contract LiveRipsTest is MarketsBase {
         assertEq(rips.spotOwner(id, 2), bob);
 
         vm.prank(operator); rips.markRipped(id);
-        assertEq(company.balance, 0.3 ether - _fee(0.2 ether) - _fee(0.1 ether));
+        assertEq(company.balance, 0); // escrow held until every sold spot is assigned
 
+        uint256 t0 = _mintCard(address(rips), keccak256("z"));
         uint256 t1 = _mintCard(address(rips), keccak256("a"));
         uint256 t2 = _mintCard(address(rips), keccak256("b"));
         uint32[] memory spots = new uint32[](2);
@@ -48,6 +49,12 @@ contract LiveRipsTest is MarketsBase {
         vm.prank(operator); rips.assignCards(id, spots, ids);
         assertEq(vault.ownerOf(t1), alice);
         assertEq(vault.ownerOf(t2), bob);
+        assertEq(company.balance, 0);
+        uint32[] memory s0 = new uint32[](1);
+        uint256[] memory i0 = new uint256[](1);
+        i0[0] = t0;
+        vm.prank(operator); rips.assignCards(id, s0, i0);
+        assertEq(company.balance, 0.3 ether - _fee(0.2 ether) - _fee(0.1 ether));
     }
 
     function test_CancelRefund() public {

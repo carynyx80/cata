@@ -16,8 +16,15 @@ import {IAggregatorV3} from "./IAggregatorV3.sol";
 /// second on principal. 0.2% fee on lender deposits, on the borrowed amount (borrower receives
 /// net) and on repay/liquidation payments (payer covers it). Lender withdrawals are fee-free.
 ///
+/// Share price: totalAssets = cash + outstanding principal + interest accrued so far (computed in
+/// O(1) from per-token running sums), so depositors joining just before a large repay do not
+/// capture interest accrued before they joined. Each loan snapshots the APR at borrow time.
+///
 /// Liquidation: when debt > liqThresholdBps of collateral value, or the loan is past due, anyone
-/// pays the debt and receives the NFT. No bad-debt socialization beyond that.
+/// pays the debt and receives the NFT. If nobody does within WRITE_OFF_GRACE after the due date,
+/// anyone can `writeOff` the loan: lenders absorb the loss (lower share price, withdrawals keep
+/// working) and the NFT goes to the company wallet to be sold; sale proceeds are returned to the
+/// pool via `donate`.
 contract CardLending is CataPayments, IERC721Receiver {
     struct Loan {
         address borrower;
@@ -26,16 +33,24 @@ contract CardLending is CataPayments, IERC721Receiver {
         uint64 start;
         uint64 due;
         bool active;
+        uint16 aprBps; // APR snapshot at borrow time
     }
 
     struct Pool {
         uint256 cash;        // liquid assets held for lenders
-        uint256 borrowed;    // outstanding principal
+        uint256 borrowed;    // outstanding principal (Σ principal_i)
         uint256 totalShares;
+        uint256 sumPrincipalApr;      // Σ principal_i · apr_i
+        uint256 sumPrincipalAprStart; // Σ principal_i · apr_i · start_i
     }
 
     uint256 public constant BPS = 10_000;
     uint256 public constant YEAR = 365 days;
+    uint256 public constant WRITE_OFF_GRACE = 7 days;
+    /// @dev virtual shares/assets offset (ERC4626-style) so donations cannot be used for a
+    /// first-depositor share-inflation attack.
+    uint256 internal constant VIRTUAL_SHARES = 1e6;
+    uint256 internal constant VIRTUAL_ASSETS = 1;
 
     ICataVault public immutable vault;
     ICataPriceIndex public immutable priceIndex;
@@ -58,6 +73,8 @@ contract CardLending is CataPayments, IERC721Receiver {
     event Borrowed(uint256 indexed tokenId, address indexed borrower, address token, uint256 principal, uint256 netReceived, uint64 due);
     event Repaid(uint256 indexed tokenId, address indexed payer, uint256 debt);
     event Liquidated(uint256 indexed tokenId, address indexed liquidator, uint256 debt);
+    event WrittenOff(uint256 indexed tokenId, address indexed token, uint256 debtLost, address collateralTo);
+    event Donated(address indexed token, address indexed from, uint256 amount);
 
     error BadToken();
     error BadParams();
@@ -68,6 +85,7 @@ contract CardLending is CataPayments, IERC721Receiver {
     error NotBorrower();
     error Healthy();
     error Insufficient();
+    error NotWritable();
 
     constructor(ICataConfig cfg, ICataVault vault_, ICataPriceIndex index, IAggregatorV3 bnbFeed) CataPayments(cfg) {
         vault = vault_;
@@ -118,9 +136,21 @@ contract CardLending is CataPayments, IERC721Receiver {
 
     // ------------------------------------------------------------ lenders
 
+    /// @notice Interest accrued (not yet paid) across all open loans in `token`.
+    function accruedInterest(address token) public view returns (uint256) {
+        Pool storage p = pools[token];
+        // Σ p_i·apr_i·(now − start_i) / (BPS·YEAR); start_i <= now so this never underflows
+        return (block.timestamp * p.sumPrincipalApr - p.sumPrincipalAprStart) / (BPS * YEAR);
+    }
+
     function totalAssets(address token) public view returns (uint256) {
         Pool storage p = pools[token];
-        return p.cash + p.borrowed;
+        return p.cash + p.borrowed + accruedInterest(token);
+    }
+
+    /// @notice Assets currently redeemable by `shares` of `token`'s pool.
+    function previewWithdraw(address token, uint256 shares) public view returns (uint256) {
+        return (shares * (totalAssets(token) + VIRTUAL_ASSETS)) / (pools[token].totalShares + VIRTUAL_SHARES);
     }
 
     function deposit(address token, uint256 amount) external payable nonReentrant whenActive(Features.LENDING) {
@@ -129,8 +159,8 @@ contract CardLending is CataPayments, IERC721Receiver {
         _pull(token, msg.sender, amount);
         uint256 net = _takeFee(token, amount);
         Pool storage p = pools[token];
-        uint256 assets = p.cash + p.borrowed;
-        uint256 shares = (p.totalShares == 0 || assets == 0) ? net : (net * p.totalShares) / assets;
+        uint256 shares = (net * (p.totalShares + VIRTUAL_SHARES)) / (totalAssets(token) + VIRTUAL_ASSETS);
+        if (shares == 0) revert Insufficient();
         p.cash += net;
         p.totalShares += shares;
         sharesOf[token][msg.sender] += shares;
@@ -140,13 +170,22 @@ contract CardLending is CataPayments, IERC721Receiver {
     function withdraw(address token, uint256 shares) external nonReentrant {
         Pool storage p = pools[token];
         if (shares == 0 || sharesOf[token][msg.sender] < shares) revert Insufficient();
-        uint256 amount = (shares * (p.cash + p.borrowed)) / p.totalShares;
+        uint256 amount = previewWithdraw(token, shares);
         if (amount > p.cash) revert NoLiquidity();
         sharesOf[token][msg.sender] -= shares;
         p.totalShares -= shares;
         p.cash -= amount;
         _push(token, msg.sender, amount);
         emit Withdrawn(token, msg.sender, amount, shares);
+    }
+
+    /// @notice Add funds to `token`'s pool for lenders (e.g. proceeds from selling written-off
+    /// collateral). Raises the share price; no shares are minted. Fee-free: not a trade.
+    function donate(address token, uint256 amount) external payable nonReentrant {
+        if (!_lendable(token) || amount == 0) revert BadToken();
+        _pull(token, msg.sender, amount);
+        pools[token].cash += amount;
+        emit Donated(token, msg.sender, amount);
     }
 
     // ------------------------------------------------------------ borrowers
@@ -163,9 +202,12 @@ contract CardLending is CataPayments, IERC721Receiver {
 
         vault.transferFrom(msg.sender, address(this), tokenId);
         uint64 due = uint64(block.timestamp) + loanDuration;
-        loans[tokenId] = Loan({borrower: msg.sender, token: token, principal: amount, start: uint64(block.timestamp), due: due, active: true});
+        uint16 apr = aprBps;
+        loans[tokenId] = Loan({borrower: msg.sender, token: token, principal: amount, start: uint64(block.timestamp), due: due, active: true, aprBps: apr});
         p.cash -= amount;
         p.borrowed += amount;
+        p.sumPrincipalApr += amount * apr;
+        p.sumPrincipalAprStart += amount * apr * block.timestamp;
 
         uint256 net = _takeFee(token, amount);
         _push(token, msg.sender, net);
@@ -176,7 +218,7 @@ contract CardLending is CataPayments, IERC721Receiver {
         Loan storage l = loans[tokenId];
         if (!l.active) return 0;
         uint256 dt = block.timestamp - l.start;
-        return l.principal + (l.principal * aprBps * dt) / (BPS * YEAR);
+        return l.principal + (l.principal * l.aprBps * dt) / (BPS * YEAR);
     }
 
     /// @notice Gross amount to send so that the post-fee amount covers the debt (with a small buffer
@@ -185,7 +227,7 @@ contract CardLending is CataPayments, IERC721Receiver {
         Loan storage l = loans[tokenId];
         if (!l.active) return 0;
         uint256 dt = block.timestamp + bufferSeconds - l.start;
-        uint256 debt = l.principal + (l.principal * aprBps * dt) / (BPS * YEAR);
+        uint256 debt = l.principal + (l.principal * l.aprBps * dt) / (BPS * YEAR);
         uint256 fee = config.feeBps();
         return (debt * BPS + (BPS - fee) - 1) / (BPS - fee) + 1;
     }
@@ -227,11 +269,35 @@ contract CardLending is CataPayments, IERC721Receiver {
         _pull(token, msg.sender, amount);
         uint256 net = _takeFee(token, amount);
         if (net < debt) revert Insufficient();
-        Pool storage p = pools[token];
-        p.borrowed -= l.principal;
-        p.cash += debt;
-        l.active = false;
+        _closeLoan(l);
+        pools[token].cash += debt;
         if (net > debt) _push(token, msg.sender, net - debt);
+    }
+
+    /// @dev Remove a loan's principal and accrued interest from the pool's accounting.
+    function _closeLoan(Loan storage l) internal {
+        Pool storage p = pools[l.token];
+        uint256 pa = l.principal * l.aprBps;
+        p.borrowed -= l.principal;
+        p.sumPrincipalApr -= pa;
+        p.sumPrincipalAprStart -= pa * l.start;
+        l.active = false;
+    }
+
+    /// @notice Bad debt: once a loan is WRITE_OFF_GRACE past due and still open (nobody
+    /// liquidated it), anyone can write it off. The debt is removed from the pool (lenders absorb
+    /// the loss through a lower share price) and the NFT goes to the company wallet to be sold;
+    /// proceeds should be returned to lenders via `donate`.
+    function writeOff(uint256 tokenId) external nonReentrant {
+        Loan storage l = loans[tokenId];
+        if (!l.active) revert NoLoan();
+        if (block.timestamp <= uint256(l.due) + WRITE_OFF_GRACE) revert NotWritable();
+        uint256 debt = debtOf(tokenId);
+        address token = l.token;
+        _closeLoan(l);
+        address company = config.companyWallet();
+        vault.transferFrom(address(this), company, tokenId);
+        emit WrittenOff(tokenId, token, debt, company);
     }
 
     function onERC721Received(address, address, uint256, bytes calldata) external view returns (bytes4) {

@@ -92,7 +92,7 @@ contract CardLendingTest is MarketsBase {
         assertTrue(lend.isLiquidatable(card));
         vm.prank(carol); lend.liquidate(card, q);
         assertEq(vault.ownerOf(card), carol);
-        (,,,,, bool active) = lend.loans(card);
+        (,,,,, bool active,) = lend.loans(card);
         assertFalse(active);
     }
 

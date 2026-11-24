@@ -31,7 +31,6 @@ contract PredictionMarket is CataPayments {
     }
 
     uint256 public constant DISPUTE_WINDOW = 24 hours;
-    uint256 public constant SWEEP_DELAY = 180 days;
     uint8 public constant MAX_OUTCOMES = 16;
 
     ICataPriceIndex public immutable priceIndex;
@@ -46,6 +45,12 @@ contract PredictionMarket is CataPayments {
     mapping(uint256 => mapping(address => mapping(address => mapping(uint8 => uint256)))) public stakeOf;
     // marketId => token => user => claimed
     mapping(uint256 => mapping(address => mapping(address => bool))) public claimed;
+    // marketId => token => stake already settled by claims (winning stake, or total stake for refunds)
+    mapping(uint256 => mapping(address => uint256)) public settledStake;
+    // marketId => token => amount paid out by claims
+    mapping(uint256 => mapping(address => uint256)) public paidOut;
+    // marketId => token => dust swept
+    mapping(uint256 => mapping(address => bool)) public dustSwept;
 
     event MarketCreated(uint256 indexed id, Kind kind, address indexed creator, uint8 outcomes, uint64 closeTime, string question);
     event BetPlaced(uint256 indexed id, address indexed user, uint8 outcome, address token, uint256 gross, uint256 net);
@@ -54,7 +59,7 @@ contract PredictionMarket is CataPayments {
     event MarketCancelled(uint256 indexed id);
     event Claimed(uint256 indexed id, address indexed user, address token, uint256 amount);
     event MinCataToCreateSet(uint256 amount);
-    event Swept(address token, uint256 amount);
+    event DustSwept(uint256 indexed id, address indexed token, uint256 amount);
 
     error NotAllowedCreator();
     error BadMarket();
@@ -212,23 +217,36 @@ contract PredictionMarket is CataPayments {
 
     // ---------------------------------------------------------------- claim
 
-    function claimable(uint256 id, address token, address user) public view returns (uint256) {
+    /// @dev Returns (payout, stake that this claim settles).
+    function _claimable(uint256 id, address token, address user) internal view returns (uint256, uint256) {
         Market storage m = _market(id);
-        if (claimed[id][token][user]) return 0;
-        if (m.status == Status.CANCELLED) return _userTotal(id, token, user, m.outcomesCount);
-        if (m.status != Status.RESOLVED) return 0;
+        if (claimed[id][token][user]) return (0, 0);
+        if (m.status == Status.CANCELLED) {
+            uint256 t = _userTotal(id, token, user, m.outcomesCount);
+            return (t, t);
+        }
+        if (m.status != Status.RESOLVED) return (0, 0);
         uint256 winPool = outcomePool[id][token][m.winningOutcome];
-        if (winPool == 0) return _userTotal(id, token, user, m.outcomesCount); // no winners: refund
+        if (winPool == 0) { // no winners: refund
+            uint256 t = _userTotal(id, token, user, m.outcomesCount);
+            return (t, t);
+        }
         uint256 s = stakeOf[id][token][user][m.winningOutcome];
-        return (s * totalPool[id][token]) / winPool;
+        return ((s * totalPool[id][token]) / winPool, s);
+    }
+
+    function claimable(uint256 id, address token, address user) public view returns (uint256 amount) {
+        (amount,) = _claimable(id, token, user);
     }
 
     /// @notice Claim winnings (or refund) in a given token. Payouts are fee-free here because
-    /// the 0.2% fee was already taken when the stake entered the pool.
+    /// the 0.2% fee was already taken when the stake entered the pool. Never expires.
     function claim(uint256 id, address token) external nonReentrant {
-        uint256 amount = claimable(id, token, msg.sender);
+        (uint256 amount, uint256 stake) = _claimable(id, token, msg.sender);
         if (amount == 0) revert NothingToClaim();
         claimed[id][token][msg.sender] = true;
+        settledStake[id][token] += stake;
+        paidOut[id][token] += amount;
         _push(token, msg.sender, amount);
         emit Claimed(id, msg.sender, token, amount);
     }
@@ -237,16 +255,31 @@ contract PredictionMarket is CataPayments {
         for (uint8 i = 0; i < n; i++) t += stakeOf[id][token][user][i];
     }
 
-    /// @notice Rounding dust / unclaimed funds: owner can sweep to treasury after a long delay
-    /// once every market has been finalized/cancelled for at least SWEEP_DELAY.
-    function sweep(address token, uint256 amount) external onlyOwner_ nonReentrant {
-        for (uint256 i = 0; i < _markets.length; i++) {
-            Market storage m = _markets[i];
-            if (m.status != Status.RESOLVED && m.status != Status.CANCELLED) revert TooEarly();
-            if (block.timestamp < m.finalizedAt + SWEEP_DELAY) revert TooEarly();
+    /// @notice Rounding dust left in a finalized market's `token` pool once EVERY winning stake
+    /// (or, for refunds, every stake) has been claimed. Sent to the treasury; permissionless.
+    /// Unclaimed winnings are never swept: they stay claimable forever.
+    function dustOf(uint256 id, address token) public view returns (uint256) {
+        Market storage m = _market(id);
+        if (dustSwept[id][token]) return 0;
+        uint256 target;
+        if (m.status == Status.CANCELLED) {
+            target = totalPool[id][token];
+        } else if (m.status == Status.RESOLVED) {
+            uint256 winPool = outcomePool[id][token][m.winningOutcome];
+            target = winPool == 0 ? totalPool[id][token] : winPool;
+        } else {
+            return 0;
         }
-        _push(token, config.treasury(), amount);
-        emit Swept(token, amount);
+        if (settledStake[id][token] != target) return 0;
+        return totalPool[id][token] - paidOut[id][token];
+    }
+
+    function sweepDust(uint256 id, address token) external nonReentrant {
+        uint256 dust = dustOf(id, token);
+        if (dust == 0) revert NothingToClaim();
+        dustSwept[id][token] = true;
+        _push(token, config.treasury(), dust);
+        emit DustSwept(id, token, dust);
     }
 
     // ---------------------------------------------------------------- views

@@ -176,14 +176,27 @@ contract PredictionMarketTest is MarketsBase {
         pm.bet{value: 1 ether}(id, 0, address(0), 1 ether);
     }
 
-    function test_SweepAfterDelay() public {
+    function test_SweepDustOnlyAfterAllClaimed() public {
         uint256 id = _pool();
         vm.prank(alice); pm.bet{value: 1 ether}(id, 0, address(0), 1 ether);
-        vm.prank(operator); pm.cancelMarket(id);
-        vm.prank(owner);
-        vm.expectRevert(PredictionMarket.TooEarly.selector);
-        pm.sweep(address(0), 1);
-        vm.warp(block.timestamp + 181 days);
-        vm.prank(owner); pm.sweep(address(0), 1);
+        vm.prank(bob); pm.bet{value: 2 ether}(id, 0, address(0), 2 ether);
+        vm.prank(carol); pm.bet{value: 1 ether}(id, 1, address(0), 1 ether);
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(oracle); pm.proposeResolution(id, 0);
+        vm.warp(block.timestamp + 24 hours);
+        pm.finalize(id);
+        vm.prank(alice); pm.claim(id, address(0));
+        vm.expectRevert(PredictionMarket.NothingToClaim.selector);
+        pm.sweepDust(id, address(0));
+        vm.warp(block.timestamp + 10 * 365 days); // unclaimed winnings never expire
+        uint256 b0 = bob.balance;
+        vm.prank(bob); pm.claim(id, address(0));
+        assertGt(bob.balance, b0);
+        uint256 dust = pm.dustOf(id, address(0));
+        uint256 t0 = treasury.balance;
+        pm.sweepDust(id, address(0));
+        assertEq(treasury.balance - t0, dust);
+        assertLe(dust, 2);
+        assertEq(address(pm).balance, 0);
     }
 }
