@@ -19,11 +19,13 @@ Node 22 prints an `ExperimentalWarning` for `node:sqlite`. It is harmless.
 
 ## Endpoints
 
-Errors always look like `{ "error": { "code", "message", "details?" } }`. CORS is controlled by `CORS_ORIGIN` (comma-separated, default `*`).
+Errors always look like `{ "error": { "code", "message", "details?" } }`. CORS is controlled by `CORS_ORIGIN` (comma-separated, `*` for any). The default allows `https://catapacks.xyz`, `https://www.catapacks.xyz`, `http://localhost:3000` and `http://localhost:3100`.
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/health` | `{ ok, cards, time }` |
+| GET | `/metadata/contract` | Collection metadata (`name: "Cata Vault"`, `external_link`) for marketplaces |
+| GET | `/metadata/:tokenId` | ERC-721 metadata for a CataVault slab (`.json` suffix accepted): name, description, image, attributes Grade/Grader/Cert/Physical (+ Game/Set/Number when the catalog id is known). Reads `CataVault.cardOf` on chain; 404 when `CATA_VAULT_ADDRESS` is unset or the token does not exist. Set the vault baseURI to `https://api.catapacks.xyz/metadata/`. |
 | GET | `/config` | `{ chainId: 56, contracts, cataToken, cataActive, feeBps: 20, paymentTokens, features }`. `cataToken` is read from `CataConfig.cataToken()` when `CATA_CONFIG_ADDRESS` is set, otherwise from `CATA_TOKEN`. An empty value or the zero address means inactive. |
 | GET | `/catalog?q=&game=&page=&limit=` | Multi-term search over name/set/number/id. `game` is one of `pokemon,magic,yugioh,onepiece,sports`. `limit` ≤ 100. Sorted by value. |
 | GET | `/cards/:id` | Card plus `wants` and `catalogIds` (bytes32 per grade). The id looks like `pokemon:base1-4`. |
@@ -69,3 +71,7 @@ The runner retries 429/5xx with backoff and honours `Retry-After`. Tune it with 
 ## Env
 
 See `.env.example`: `PORT`, `CORS_ORIGIN`, `DATA_DIR`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `RPC_URL` (BSC `https://bsc-dataseed.binance.org`), `ORACLE_PRIVATE_KEY`, contract addresses (`CATA_CONFIG_ADDRESS`, `CATA_VAULT_ADDRESS`, `PACK_MACHINE_ADDRESS`, `CATA_PRICE_INDEX_ADDRESS`, `CATA_POINTS_ADDRESS`, …), `CATA_TOKEN`, and `FEATURE_PACK_BATTLES` / `FEATURE_FRACTIONAL` / `FEATURE_PREDICTIONS` (all off by default). No secrets are in the code.
+
+## Deploy (Railway)
+
+`Dockerfile` + `railway.json` (Dockerfile builder, healthcheck `/health`). Set the service root directory to `/backend`. The server listens on `$PORT` at `0.0.0.0` (`HOST` overrides). SQLite lives in `$DATA_DIR/cata.db` (default `./data`, `/data` in the image); mount a volume at `/data` to keep it across deploys, otherwise the DB is re-seeded on each deploy.

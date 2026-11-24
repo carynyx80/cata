@@ -1,12 +1,12 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { getAddress, isAddress, zeroAddress, type Address } from "viem";
+import { getAddress, hexToString, isAddress, zeroAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import type { Repo, LiveRip } from "./db.js";
 import { env as readEnv, type Env } from "./env.js";
-import { nullChain, type ChainReader } from "./chain.js";
+import { nullChain, TokenNotFoundError, type ChainReader } from "./chain.js";
 import { catalogId } from "./catalogId.js";
 import { cataPriceIndex } from "./priceIndex.js";
 import { listPools, reverseCatalogIds } from "./pools.js";
@@ -344,5 +344,65 @@ export function createApp(deps: AppDeps) {
     return c.body(null, 204);
   });
 
+  // ---- NFT metadata (CataVault baseURI points here: <base>/metadata/<tokenId>) ----
+  const SITE = "https://catapacks.xyz";
+  const GAME_LABEL: Record<string, string> = { pokemon: "Pokemon", magic: "Magic: The Gathering", yugioh: "Yu-Gi-Oh!", onepiece: "One Piece", sports: "Sports" };
+
+  app.get("/metadata/contract", (c) => {
+    c.header("Cache-Control", "public, max-age=3600");
+    return c.json({
+      name: "Cata Vault",
+      description: "Graded trading cards held in the Cata vault. Each token is one physical slab you can trade, open in glass packs, or redeem for the real card.",
+      image: `${SITE}/favicon.ico`,
+      external_link: SITE,
+    });
+  });
+
+  app.get("/metadata/:tokenId", async (c) => {
+    const raw = c.req.param("tokenId").replace(/\.json$/, "");
+    if (!/^\d{1,78}$/.test(raw)) throw new ApiError(400, "invalid_token_id", "tokenId must be a non-negative integer");
+    const tokenId = BigInt(raw);
+    let slab;
+    try {
+      slab = await chain.vaultCard(tokenId);
+    } catch (err) {
+      if (err instanceof TokenNotFoundError) throw new ApiError(404, "token_not_found", `token ${raw} does not exist`);
+      throw new ApiError(502, "chain_error", "failed to read the vault");
+    }
+    if (!slab) throw new ApiError(404, "vault_not_configured", "CATA_VAULT_ADDRESS is not set");
+    const grader = graderName(slab.grader);
+    const ref = reverseCatalogIds(repo).get(slab.catalogId.toLowerCase());
+    const card = ref ? repo.getCard(ref.cardId) : null;
+    const gradeLabel = slab.grade > 0 ? `${grader || "Graded"} ${slab.grade}` : "Raw";
+    const attributes: { trait_type: string; value: string | number; display_type?: string }[] = [
+      { trait_type: "Grade", value: slab.grade, display_type: "number" },
+      { trait_type: "Grader", value: grader || "None" },
+      { trait_type: "Cert", value: slab.cert || "None" },
+      { trait_type: "Physical", value: slab.physical ? "In vault" : "Redeemed" },
+    ];
+    if (card) {
+      attributes.push({ trait_type: "Game", value: GAME_LABEL[card.game] ?? card.game }, { trait_type: "Set", value: card.set }, { trait_type: "Number", value: card.number });
+      if (card.rarity) attributes.push({ trait_type: "Rarity", value: card.rarity });
+    }
+    c.header("Cache-Control", "public, max-age=300");
+    return c.json({
+      name: card ? `${card.name} · ${gradeLabel}` : `Cata Slab #${raw}`,
+      description: card
+        ? `${card.name} (${card.set} #${card.number}), ${gradeLabel}${slab.cert ? `, cert ${slab.cert}` : ""}. ${slab.physical ? "The physical card is held in the Cata vault and can be redeemed." : "This card has been redeemed."}`
+        : `Cata vault slab #${raw}, ${gradeLabel}${slab.cert ? `, cert ${slab.cert}` : ""}.`,
+      image: card?.imageUrl || `${SITE}/favicon.ico`,
+      external_url: `${SITE}/vault`,
+      attributes,
+      catalogId: slab.catalogId,
+      cardId: card?.id ?? null,
+    });
+  });
+
   return app;
 }
+
+/** bytes16 ASCII (e.g. "PSA" right-padded with zeros) to a string. */
+export function graderName(b: Hex): string {
+  try { return hexToString(b).replace(/\0+$/g, "").trim(); } catch { return ""; }
+}
+

@@ -26,13 +26,26 @@ export interface OnchainPool {
 }
 
 /** Everything the API reads from chain. Each method returns null when its contract is not configured. */
+/** CataVault.cardOf(tokenId): the slab's on-chain record. */
+export interface VaultCard {
+  catalogId: Hex;
+  grade: number;
+  grader: Hex; // bytes16, ASCII right-padded with zeros
+  cert: string;
+  physical: boolean;
+}
+
 export interface ChainReader {
   cataToken(): Promise<Address | null>;
   feeBps(): Promise<number | null>;
   pointsOf(wallet: Address): Promise<bigint | null>;
   pools(): Promise<OnchainPool[] | null>;
   ownedCatalogIds(wallet: Address): Promise<Hex[] | null>;
+  /** null when the vault is not configured; throws TokenNotFoundError when the token does not exist. */
+  vaultCard(tokenId: bigint): Promise<VaultCard | null>;
 }
+
+export class TokenNotFoundError extends Error {}
 
 export const nullChain: ChainReader = {
   cataToken: async () => null,
@@ -40,6 +53,7 @@ export const nullChain: ChainReader = {
   pointsOf: async () => null,
   pools: async () => null,
   ownedCatalogIds: async () => null,
+  vaultCard: async () => null,
 };
 
 async function catalogIdsOf(client: PublicClient, vault: Address, tokenIds: bigint[]): Promise<Hex[]> {
@@ -124,6 +138,17 @@ export function createChainReader(e: Env): ChainReader {
       if (!c.vault) return null;
       const ids = await ownedTokenIds(client, c.vault, wallet, e.vaultDeployBlock, e.vaultLogChunk);
       return catalogIdsOf(client, c.vault, ids);
+    },
+    async vaultCard(tokenId) {
+      if (!c.vault) return null;
+      try {
+        const r = (await client.readContract({ address: c.vault, abi: cataVaultAbi, functionName: "cardOf", args: [tokenId] })) as VaultCard;
+        return { catalogId: r.catalogId, grade: Number(r.grade), grader: r.grader, cert: r.cert, physical: r.physical };
+      } catch (err) {
+        // ERC721NonexistentToken (OZ _requireOwned) or any other revert from cardOf
+        if (err instanceof Error && /revert|NonexistentToken/i.test(err.message)) throw new TokenNotFoundError(String(tokenId));
+        throw err;
+      }
     },
   };
 }

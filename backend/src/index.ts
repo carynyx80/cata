@@ -12,8 +12,8 @@ const anyContract = Object.values(e.contracts).some(Boolean);
 const chain = anyContract ? createChainReader(e) : nullChain;
 const app = createApp({ repo, chain });
 
-const server = serve({ fetch: app.fetch, port: e.port }, (info) => {
-  console.log(`cata backend listening on http://localhost:${info.port} (chain reads: ${anyContract ? "on" : "off"}, scan: ${e.anthropicKey ? "on" : "off"})`);
+const server = serve({ fetch: app.fetch, port: e.port, hostname: e.host }, (info) => {
+  console.log(`cata backend listening on http://${e.host}:${info.port} (chain reads: ${anyContract ? "on" : "off"}, scan: ${e.anthropicKey ? "on" : "off"})`);
 });
 const stop = () => server.close(() => process.exit(0));
 process.on("SIGINT", stop);
