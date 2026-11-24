@@ -30,8 +30,10 @@ function MarketCard({ m, idx }: { m: Market; idx: string }) {
   const s = Math.max(0, parseFloat(stake) || 0);
   const unit = cur === "bnb" ? "bnb" : "usdt";
   const scale = cur === "usdt" ? 620 : 1; // mock: usdt pools mirror bnb pools
-  // parimutuel: payout = stake * (totalPool * (1 - fee)) / (outcomePool + stake)
-  const shown = s > 0 ? (s * (total * scale * (1 - FEE))) / (m.outcomes[pick].pool * scale + s) : 0;
+  // matches PredictionMarket.sol: fee taken at bet time, net stake joins the pool,
+  // payout = net * (totalPool + net) / (outcomePool + net)
+  const net = s * (1 - FEE);
+  const shown = net > 0 ? (net * (total * scale + net)) / (m.outcomes[pick].pool * scale + net) : 0;
   return (
     <div className="grid gap-6 rounded-[32px] bg-surface p-6 md:p-8 lg:grid-cols-[1.3fr_1fr]">
       <div>
@@ -86,7 +88,7 @@ export default function Predict() {
           </motion.div>
         </AnimatePresence>
       </div>
-      <p className="mt-6 font-mono text-[11px] text-muted">payout = stake × (total pool × (1 − 0.002)) ÷ (outcome pool + stake) · $cata pools open after activation</p>
+      <p className="mt-6 font-mono text-[11px] text-muted">payout = your stake after 0.2% fee × (total pool incl. you) ÷ (your side's pool incl. you) · $cata pools open after activation</p>
     </Page>
   );
 }
