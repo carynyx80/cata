@@ -1,19 +1,38 @@
 "use client";
-import { useState } from "react";
+import { useId, useState } from "react";
+import dynamic from "next/dynamic";
 import { useLocation } from "@/lib/hooks";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { readContract } from "wagmi/actions";
 import { decodeEventLog, encodeAbiParameters, keccak256, parseUnits, type Abi, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { Reveal } from "@/components/Reveal";
-import { Page, PageHead, PayToggle, input, btnPink, btn, type Pay } from "@/components/ui";
+import { Page, PageHead, PayToggle, input, btnPink, btn, btnLine, type Pay } from "@/components/ui";
 import { Act } from "@/components/web3/Act";
-import { PackReveal, type Pending } from "@/components/web3/PackReveal";
+import type { Pending } from "@/components/web3/PackReveal";
 import { useTx } from "@/components/web3/tx";
 import { giftPacksAbi, packMachineAbi } from "@/lib/abis";
 import { addresses, CHAIN_ID, payToken } from "@/lib/contracts";
 import { api, SITE_URL, type ApiPool } from "@/lib/api";
+
+// the reveal overlay only shows after a claim, so keep it out of the first load
+const PackReveal = dynamic(() => import("@/components/web3/PackReveal").then((m) => m.PackReveal), { ssr: false });
+/** page-level a11y + responsive helpers (scoped here so shared components stay untouched) */
+const shell = "[&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-pink [&_h1]:text-[clamp(2.25rem,9vw,6rem)] [&_h1]:text-balance";
+const tapTargets = "pointer-coarse:[&_button]:min-h-11";
+
+/** Copy with a fallback for in-app browsers / non-secure contexts where navigator.clipboard is missing. */
+async function copyText(t: string) {
+  try { await navigator.clipboard.writeText(t); return true; } catch { /* fall through */ }
+  const ta = document.createElement("textarea");
+  ta.value = t; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { /* ignore */ }
+  ta.remove();
+  return ok;
+}
 
 const tiers = [["starter", 25], ["collector", 50], ["grail", 250]] as const;
 
@@ -34,6 +53,11 @@ export default function Gift() {
   const claim = typed ?? fromUrl;
   const [claimed, setClaimed] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [copied, setCopied] = useState<"" | "copied" | "failed">("");
+  const claimId = useId();
+  const canShare = useLocation(() => typeof navigator !== "undefined" && "share" in navigator, false);
+  const copy = async () => { if (!code) return; const ok = await copyText(code); setCopied(ok ? "copied" : "failed"); setTimeout(() => setCopied(""), 2000); };
+  const share = () => { if (code) navigator.share?.({ title: "a cata pack for you", text: "open your gift pack on cata", url: code }).catch(() => {}); };
   const { run, busy, address, config } = useTx();
   const live = !!addresses.giftPacks && !!addresses.packMachine;
   const pools = useQuery({ queryKey: ["pools"], queryFn: () => api<{ items: ApiPool[] }>("/pools"), retry: 1, staleTime: 30_000 });
@@ -79,50 +103,56 @@ export default function Gift() {
     } catch { /* toast */ }
   };
   return (
-    <Page>
+    <MotionConfig reducedMotion="user"><div className={shell}><Page>
       <PageHead kicker="gift a pack" title="send an unopened rip." sub="pay for a pack, get a claim link. they open it — the pull is theirs." />
-      <div className="mt-12 grid gap-5 lg:grid-cols-[1.3fr_1fr]">
-        <Reveal>
-          <div className="rounded-[32px] bg-surface p-6 md:p-8">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted">1 · choose a tier</div>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-10 grid gap-5 sm:mt-12 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <Reveal className="min-w-0">
+          <div className="rounded-[28px] bg-surface p-5 sm:rounded-[32px] sm:p-6 md:p-8">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted" id="gtier">1 · choose a tier</div>
+            <div className="mt-4 grid gap-2.5 sm:grid-cols-3 sm:gap-3" role="group" aria-labelledby="gtier">
               {tiers.map(([n, p], i) => (
-                <button key={n} onClick={() => { setTier(i); setCode(null); }}
-                  className={`rounded-3xl p-5 text-left transition ${tier === i ? "bg-ink text-surface" : "bg-cream hover:bg-soft/60"}`}>
+                <button key={n} type="button" onClick={() => { setTier(i); setCode(null); }} aria-pressed={tier === i}
+                  className={`flex min-h-11 items-baseline justify-between rounded-3xl px-5 py-4 text-left transition sm:block sm:p-5 ${tier === i ? "bg-ink text-surface" : "bg-cream hover:bg-soft/60"}`}>
                   <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{n}</div>
-                  <div className="mt-3 font-display text-4xl">${p}</div>
+                  <div className="font-display text-3xl sm:mt-3 sm:text-4xl">${p}</div>
                 </button>
               ))}
             </div>
             <div className="mt-6 font-mono text-[10px] uppercase tracking-widest text-muted">2 · pay</div>
-            <div className="mt-3"><PayToggle value={pay} onChange={setPay} id="gpay" noCata /></div>
-            <Act need={["giftPacks", "packMachine"]} onClick={buyGift} busy={busy} busyLabel="buying…" className={`${btnPink} mt-6`}>pay ${price.toLocaleString("en-US")} in {pay} & get link</Act>
+            <div className={`mt-3 ${tapTargets}`} role="group" aria-label="pay with"><PayToggle value={pay} onChange={setPay} id="gpay" noCata /></div>
+            <Act need={["giftPacks", "packMachine"]} onClick={buyGift} busy={busy} busyLabel="buying…" className={`${btnPink} mt-6 min-h-12 w-full sm:w-auto`}>pay ${price.toLocaleString("en-US")} in {pay} & get link</Act>
             <AnimatePresence>
               {code && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                   <div className="mt-6 rounded-3xl bg-soft p-5">
                     <div className="font-mono text-[10px] uppercase tracking-widest text-deep">3 · send this · anyone with the link can claim</div>
-                    <div className="mt-2 break-all font-mono text-sm">{code}</div>
-                    <button onClick={() => navigator.clipboard?.writeText(code)} className={`${btn} mt-4 py-2 text-sm`}>copy link</button>
+                    <div className="mt-2 max-h-32 select-all overflow-y-auto break-all rounded-2xl bg-surface/60 p-3 font-mono text-sm">{code}</div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={copy} className={`${btn} min-h-11 py-2 text-sm`}>{copied === "copied" ? "copied ✓" : "copy link"}</button>
+                      {canShare && <button type="button" onClick={share} className={`${btnLine} min-h-11 py-2 text-sm`}>share…</button>}
+                      <span role="status" className="font-mono text-xs text-deep">{copied === "failed" ? "couldn't copy — press and hold the link to copy it" : ""}</span>
+                    </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </Reveal>
-        <Reveal delay={.06}>
-          <div className="h-full rounded-[32px] bg-ink p-6 text-surface md:p-8">
+        <Reveal delay={.06} className="min-w-0">
+          <div className="h-full rounded-[28px] bg-ink p-5 text-surface sm:rounded-[32px] sm:p-6 md:p-8">
             <div className="font-mono text-[10px] uppercase tracking-widest text-surface/60">got a gift?</div>
-            <h3 className="mt-3 font-display text-3xl">claim a gift.</h3>
-            <p className="mt-2 text-surface/60">paste your link. we rip it on-chain and the pull lands in your vault.</p>
-            <input value={claim} onChange={(e) => { setClaim(e.target.value.trim()); setClaimed(false); }} placeholder="https://catapacks.xyz/gift?g=…#k=…" className={`${input} mt-6 border-surface/15 bg-surface/5 text-surface`} />
-            <Act need={["giftPacks"]} disabled={!parseClaim(claim)} busy={busy} busyLabel="claiming…" onClick={claimGift} className={`${btnPink} mt-4 w-full`}>claim pack</Act>
+            <h3 className="mt-3 font-display text-[clamp(1.6rem,6vw,1.875rem)]">claim a gift.</h3>
+            <p className="mt-2 text-[15px] text-surface/60 sm:text-base">paste your link. we rip it on-chain and the pull lands in your vault.</p>
+            <label htmlFor={claimId} className="sr-only">gift claim link or code</label>
+            <input id={claimId} value={claim} onChange={(e) => { setClaim(e.target.value.trim()); setClaimed(false); }} placeholder="https://catapacks.xyz/gift?g=…#k=…" inputMode="url" autoCapitalize="off" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="go"
+              className={`${input} mt-6 min-h-12 text-ellipsis border-surface/15 bg-surface/5 !text-base text-surface placeholder:text-surface/40`} />
+            <Act need={["giftPacks"]} disabled={!parseClaim(claim)} busy={busy} busyLabel="claiming…" onClick={claimGift} className={`${btnPink} mt-4 min-h-12 w-full`}>claim pack</Act>
             {claimed && <p className="mt-4 font-mono text-xs text-soft">claimed · vrf is ripping your pack</p>}
             {!live && claim && <p className="mt-4 font-mono text-xs text-soft">gift packs launch with the contracts</p>}
           </div>
         </Reveal>
       </div>
-      <PackReveal key={pending ? String(pending.creditId) : "none"} pending={pending} onClose={() => setPending(null)} />
-    </Page>
+      {pending && <PackReveal key={String(pending.creditId)} pending={pending} onClose={() => setPending(null)} />}
+    </Page></div></MotionConfig>
   );
 }

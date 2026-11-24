@@ -33,7 +33,9 @@ export function ConnectModal() {
     reset();
     const esc = (e: KeyboardEvent) => e.key === "Escape" && closeConnect();
     window.addEventListener("keydown", esc);
-    return () => window.removeEventListener("keydown", esc);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = prev; };
   }, [connectOpen, closeConnect, reset]);
 
   // EIP-6963 wallets show up as their own connectors; keep the generic "injected" one first.
@@ -43,18 +45,19 @@ export function ConnectModal() {
   return (
     <AnimatePresence>
       {connectOpen && (
-        <motion.div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={closeConnect} />
           <motion.div role="dialog" aria-modal aria-label="connect a wallet"
             initial={{ opacity: 0, y: 24, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 16, scale: .98 }}
             transition={{ duration: .28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-md rounded-[36px] bg-surface p-6 shadow-[0_50px_100px_-30px_rgba(43,26,34,.6)] sm:p-8">
+            className="pb-safe relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-[32px] bg-surface px-5 pt-3 shadow-[0_50px_100px_-30px_rgba(43,26,34,.6)] sm:rounded-[36px] sm:p-8 sm:pb-8">
+            <div aria-hidden className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-ink/15 sm:hidden" />
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">connect</p>
-                <h2 className="mt-3 font-display text-4xl leading-[.95]">pick a wallet.</h2>
+                <h2 className="mt-3 font-display text-[clamp(1.9rem,8vw,2.25rem)] leading-[.95]">pick a wallet.</h2>
               </div>
-              <LogoMark size={54} />
+              <span className="shrink-0"><LogoMark size={54} /></span>
             </div>
             <p className="mt-3 text-muted">cata runs on bnb chain. you&apos;ll sign with your own wallet — we never hold your keys.</p>
             <div className="mt-6 space-y-2.5">
@@ -64,18 +67,18 @@ export function ConnectModal() {
                 return (
                   <button key={c.uid} disabled={isPending || missing}
                     onClick={() => connect({ connector: c, chainId: CHAIN_ID })}
-                    className="group flex w-full items-center justify-between gap-4 rounded-3xl bg-cream px-5 py-4 text-left transition hover:-translate-y-0.5 hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:bg-cream">
-                    <span className="flex items-center gap-3.5">
+                    className="group flex min-h-16 w-full items-center justify-between gap-4 rounded-3xl bg-cream px-4 py-3.5 sm:px-5 sm:py-4 text-left transition hover:-translate-y-0.5 hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:bg-cream">
+                    <span className="flex min-w-0 items-center gap-3.5">
                       {c.icon
                         // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={c.icon} alt="" className="h-9 w-9 rounded-xl" />
-                        : <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink font-display text-lg text-surface">{label(c)[0]}</span>}
-                      <span>
+                        ? <img src={c.icon} alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-xl" />
+                        : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ink font-display text-lg text-surface">{label(c)[0]}</span>}
+                      <span className="min-w-0">
                         <span className="block font-medium">{label(c)}</span>
                         <span className="block font-mono text-[11px] text-muted">{missing ? "no browser wallet found" : blurb[c.id] ?? blurb[c.type] ?? "detected in your browser"}</span>
                       </span>
                     </span>
-                    <span className="font-mono text-xs text-muted transition group-hover:translate-x-0.5 group-hover:text-pink">{busy ? "check wallet…" : "→"}</span>
+                    <span className="shrink-0 font-mono text-xs text-muted transition group-hover:translate-x-0.5 group-hover:text-pink">{busy ? "check wallet…" : "→"}</span>
                   </button>
                 );
               })}
@@ -83,7 +86,7 @@ export function ConnectModal() {
             {error && <p className="mt-4 rounded-2xl bg-soft/70 px-4 py-3 font-mono text-[11px] text-deep">{error.message.split("\n")[0].toLowerCase()}</p>}
             <div className="mt-6 flex items-center justify-between font-mono text-[11px] text-muted">
               <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#F0B90B]" /> bnb smart chain · 56</span>
-              <button onClick={closeConnect} className="rounded-full px-3 py-1 hover:bg-cream hover:text-ink">close</button>
+              <button onClick={closeConnect} className="min-h-11 rounded-full px-4 hover:bg-cream hover:text-ink">close</button>
             </div>
           </motion.div>
         </motion.div>

@@ -34,11 +34,11 @@ export function ListModal({ open, onClose, preselect, onListed }: { open: boolea
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+        <motion.div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm" onClick={close} />
-          <motion.div initial={{ y: 24, scale: .97 }} animate={{ y: 0, scale: 1 }} className="relative max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-[36px] bg-surface p-6 sm:p-8">
+          <motion.div initial={{ y: 24, scale: .97 }} animate={{ y: 0, scale: 1 }} role="dialog" aria-modal aria-label="list a card" className="pb-safe relative max-h-[92dvh] w-full max-w-xl overflow-y-auto overscroll-contain rounded-t-[32px] bg-surface px-5 pt-6 sm:rounded-[36px] sm:p-8 sm:pb-8">
             <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">list a card</p>
-            <h2 className="mt-3 font-display text-4xl leading-[.95]">set your price.</h2>
+            <h2 className="mt-3 font-display text-[clamp(1.9rem,8vw,2.25rem)] leading-[.95]">set your price.</h2>
             <div className="mt-6 font-mono text-[10px] uppercase tracking-widest text-muted">1 · pick a slab</div>
             {slabs.isLoading ? <p className="mt-3 font-mono text-xs text-muted">reading your vault…</p>
               : !slabs.data?.length ? <p className="mt-3 font-mono text-xs text-muted">no slabs in this wallet yet — open a pack first.</p>
@@ -58,7 +58,7 @@ export function ListModal({ open, onClose, preselect, onListed }: { open: boolea
             <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ""))} placeholder={`price in ${pay}`} inputMode="decimal" className={`${input} mt-4 text-lg`} />
             <p className="mt-2 font-mono text-[10px] text-muted">buyer pays this · 0.2% fee is taken from it and burns $cata</p>
             <div className="mt-6 flex justify-between gap-3">
-              <button onClick={close} className="rounded-full px-5 py-3 font-mono text-xs text-muted hover:text-ink">cancel</button>
+              <button onClick={close} className="min-h-11 rounded-full px-5 py-3 font-mono text-xs text-muted hover:text-ink">cancel</button>
               <button onClick={submit} disabled={busy || sel === undefined || !(parseFloat(price) > 0)} className={btnPink}>{busy ? "listing…" : "approve & list →"}</button>
             </div>
           </motion.div>

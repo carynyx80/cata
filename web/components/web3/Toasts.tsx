@@ -39,7 +39,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-[70] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
         <AnimatePresence initial={false}>
           {list.map((t) => (
             <motion.div key={t.id} layout initial={{ opacity: 0, y: 16, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, x: 40 }}
@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   {t.detail && <div className="mt-0.5 break-words font-mono text-[11px] opacity-75">{t.detail}</div>}
                   {t.hash && <a href={bscscanTx(t.hash)} target="_blank" rel="noreferrer" className="mt-1.5 inline-block font-mono text-[11px] underline underline-offset-2 opacity-90 hover:opacity-100">view on bscscan ↗</a>}
                 </div>
-                <button onClick={() => dismiss(t.id)} aria-label="dismiss" className="font-mono text-xs opacity-60 hover:opacity-100">×</button>
+                <button onClick={() => dismiss(t.id)} aria-label="dismiss notification" className="-m-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-sm opacity-60 hover:opacity-100">×</button>
               </div>
             </motion.div>
           ))}

@@ -10,9 +10,9 @@ export function PageHead({ kicker, title, sub, children }: { kicker: string; tit
   return (
     <Reveal>
       <div className="flex flex-wrap items-end justify-between gap-6">
-        <div>
+        <div className="min-w-0">
           <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">{kicker}</p>
-          <h1 className="mt-4 font-display text-[clamp(2.6rem,7vw,6rem)] leading-[.95]">{title}</h1>
+          <h1 className="mt-4 font-display text-[clamp(2.4rem,9vw,6rem)] leading-[.95]">{title}</h1>
           {sub && <p className="mt-5 max-w-xl text-lg text-muted md:text-xl">{sub}</p>}
         </div>
         {children}
@@ -22,7 +22,7 @@ export function PageHead({ kicker, title, sub, children }: { kicker: string; tit
 }
 
 export function Page({ children }: { children: ReactNode }) {
-  return <div className="mx-auto max-w-7xl px-4 pt-12 md:px-8 md:pt-16">{children}</div>;
+  return <div className="mx-auto max-w-7xl px-4 pt-10 sm:pt-12 md:px-8 md:pt-16">{children}</div>;
 }
 
 export const pays = ["bnb", "usdt", "$cata"] as const;
@@ -36,7 +36,7 @@ export function Toggle<T extends string>({ options, value, onChange, disabled = 
         const off = disabled.includes(p);
         return (
           <button key={p} type="button" disabled={off} onClick={() => onChange(p)}
-            className={`relative rounded-full transition ${size === "sm" ? "px-3 py-1.5" : "px-5 py-2"} ${off ? "cursor-not-allowed opacity-50" : dark ? "hover:text-surface" : "hover:text-ink"} ${value === p ? (dark ? "text-ink" : "text-surface") : dark ? "text-surface/70" : "text-muted"}`}>
+            className={`relative rounded-full transition pointer-coarse:min-h-11 ${size === "sm" ? "px-3 py-1.5" : "px-5 py-2"} ${off ? "cursor-not-allowed opacity-50" : dark ? "hover:text-surface" : "hover:text-ink"} ${value === p ? (dark ? "text-ink" : "text-surface") : dark ? "text-surface/70" : "text-muted"}`}>
             {value === p && <motion.span layoutId={id} className={`absolute inset-0 rounded-full ${dark ? "bg-surface" : "bg-ink"}`} transition={{ type: "spring", stiffness: 400, damping: 30 }} />}
             <span className="relative">{p}{off && <span className="ml-1.5 text-[10px]">soon</span>}</span>
           </button>
@@ -80,16 +80,17 @@ export function WantButton({ count, className = "", cardId }: { count: number; c
   const shown = n ?? count + (on ? 1 : 0);
   return (
     <motion.button type="button" whileTap={{ scale: .92 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(); }}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-xs transition ${on ? "bg-pink text-surface" : "border border-ink/15 bg-surface text-ink hover:border-pink hover:text-pink"} ${className}`}>
-      <span>{on ? "♥" : "♡"}</span> want · {shown.toLocaleString("en-US")}
+      aria-pressed={on} aria-label={`${on ? "remove from wants" : "want this card"} · ${shown.toLocaleString("en-US")} wants`}
+      className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-xs transition pointer-coarse:min-h-11 ${on ? "bg-pink text-surface" : "border border-ink/15 bg-surface text-ink hover:border-pink hover:text-pink"} ${className}`}>
+      <span aria-hidden>{on ? "♥" : "♡"}</span> want · {shown.toLocaleString("en-US")}
     </motion.button>
   );
 }
 
 export function SoonBanner({ children = "coming soon — switched off at launch" }: { children?: ReactNode }) {
   return (
-    <div className="mb-10 flex items-center gap-3 rounded-full border border-dashed border-deep/40 bg-soft/60 px-5 py-3 font-mono text-xs text-deep">
-      <span className="h-1.5 w-1.5 rounded-full bg-deep" /> {children}
+    <div className="mb-10 flex items-center gap-3 rounded-[28px] border border-dashed border-deep/40 bg-soft/60 px-5 py-3 font-mono text-xs text-deep">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-deep" /> {children}
     </div>
   );
 }
@@ -106,5 +107,5 @@ export function Stat({ k, v, dark = false }: { k: string; v: ReactNode; dark?: b
 export const btn = "rounded-full bg-ink px-6 py-3 font-medium text-surface transition-all hover:-translate-y-0.5 hover:bg-pink disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:bg-ink";
 export const btnPink = "rounded-full bg-pink px-6 py-3 font-medium text-surface shadow-[0_12px_30px_-12px_#E2487F] transition-all hover:-translate-y-0.5 hover:bg-deep disabled:cursor-not-allowed disabled:opacity-40";
 export const btnLine = "rounded-full border-2 border-ink px-6 py-3 font-medium transition-all hover:-translate-y-0.5 hover:bg-ink hover:text-surface disabled:cursor-not-allowed disabled:opacity-40";
-export const input = "w-full rounded-2xl border border-ink/15 bg-cream px-4 py-3 font-mono text-sm outline-none transition focus:border-pink";
+export const input = "w-full rounded-2xl border border-ink/15 bg-cream px-4 py-3 font-mono text-base outline-none transition focus:border-pink sm:text-sm";
 export const card = "rounded-[32px] bg-surface p-6";

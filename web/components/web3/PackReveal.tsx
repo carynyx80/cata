@@ -75,7 +75,7 @@ export function PackReveal({ pending, onClose }: { pending: Pending | null; onCl
       {pending && (
         <motion.div className="fixed inset-0 z-[60] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-ink/50 backdrop-blur-sm" onClick={card ? onClose : undefined} />
-          <motion.div initial={{ y: 24, scale: .97 }} animate={{ y: 0, scale: 1 }} className="relative w-full max-w-md rounded-[36px] bg-surface p-6 text-center sm:p-8">
+          <motion.div initial={{ y: 24, scale: .97 }} animate={{ y: 0, scale: 1 }} role="dialog" aria-modal aria-label="pack reveal" className="relative max-h-[92dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-[36px] bg-surface p-6 text-center sm:p-8">
             <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">{pending.pool} pack · credit #{String(pending.creditId)}</p>
             {!card ? (
               <>
@@ -89,7 +89,7 @@ export function PackReveal({ pending, onClose }: { pending: Pending | null; onCl
                   <div className="absolute inset-0 flex items-center justify-center font-display text-7xl text-ink">?</div>
                 </div>
                 <p className="mt-6 font-mono text-[11px] text-muted">{slow ? "still waiting on vrf — you can close this; the card lands in your vault either way." : "watching packmachine for your pull…"}</p>
-                <button onClick={onClose} className="mt-4 font-mono text-xs text-muted underline-offset-2 hover:text-ink hover:underline">close</button>
+                <button onClick={onClose} className="mt-4 min-h-11 px-4 font-mono text-xs text-muted underline-offset-2 hover:text-ink hover:underline">close</button>
               </>
             ) : (
               <motion.div initial={{ opacity: 0, rotateY: 90 }} animate={{ opacity: 1, rotateY: 0 }} transition={{ duration: .6, ease: [0.22, 1, 0.36, 1] }}>

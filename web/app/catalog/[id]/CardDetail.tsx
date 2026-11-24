@@ -12,9 +12,9 @@ export function CardDetail({ c }: { c: CatalogCard }) {
   const grades = [["raw", c.raw], ["psa 8", Math.round(c.psa9 * .55)], ["psa 9", c.psa9], ["psa 10", c.psa10], ["bgs 9.5", Math.round(c.psa10 * .72)], ["cgc 10", Math.round(c.psa10 * .6)]] as const;
   return (
     <Page>
-      <Link href="/catalog" className="font-mono text-xs text-muted hover:text-pink">← catalog</Link>
-      <div className="mt-6 grid gap-10 lg:grid-cols-[360px_1fr]">
-        <Reveal><div className="mx-auto w-full max-w-[320px]"><Slab card={c} /></div></Reveal>
+      <Link href="/catalog" className="inline-flex min-h-11 items-center font-mono text-xs text-muted hover:text-pink">← catalog</Link>
+      <div className="mt-4 grid gap-8 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] lg:grid-cols-[360px_minmax(0,1fr)] lg:gap-10">
+        <Reveal><div className="mx-auto w-full max-w-[260px] md:sticky md:top-24 md:max-w-[320px]"><Slab card={c} /></div></Reveal>
         <div>
           <Reveal>
             <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">{c.game} · {c.set}</p>
@@ -25,7 +25,7 @@ export function CardDetail({ c }: { c: CatalogCard }) {
             </div>
           </Reveal>
           <Reveal delay={.05}>
-            <div className="mt-8 rounded-[32px] bg-surface p-6">
+            <div className="mt-8 rounded-[28px] bg-surface p-4 sm:rounded-[32px] sm:p-6">
               <div className="flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <div className="font-mono text-[10px] uppercase tracking-widest text-muted">{c.grader} {c.grade} · last 12 months</div>
@@ -33,15 +33,15 @@ export function CardDetail({ c }: { c: CatalogCard }) {
                 </div>
                 <div className={`font-mono text-sm ${chg >= 0 ? "text-deep" : "text-muted"}`}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(1)}% · 12m</div>
               </div>
-              <div className="mt-4"><PriceChart data={c.history} /></div>
+              <div className="mt-4 aspect-[640/280]"><PriceChart data={c.history} /></div>
             </div>
           </Reveal>
           <Reveal delay={.1}>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
               {grades.map(([k, v]) => (
-                <div key={k} className="rounded-3xl bg-surface px-5 py-4">
+                <div key={k} className="min-w-0 rounded-3xl bg-surface px-4 py-3 sm:px-5 sm:py-4">
                   <div className="font-mono text-[10px] uppercase tracking-widest text-muted">{k}</div>
-                  <div className="mt-1 font-mono text-xl">{fmt(v)}</div>
+                  <div className="mt-1 truncate font-mono text-lg sm:text-xl">{fmt(v)}</div>
                 </div>
               ))}
             </div>

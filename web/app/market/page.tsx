@@ -9,7 +9,7 @@ import { readContract } from "wagmi/actions";
 import { formatUnits, type Abi, type Address } from "viem";
 import { Page, PageHead, PayToggle, Toggle, btnPink, type Pay } from "@/components/ui";
 import { Act } from "@/components/web3/Act";
-import { ListModal } from "@/components/web3/ListModal";
+import dynamic from "next/dynamic";
 import { useCata } from "@/components/web3/Providers";
 import { loadSlab, type Slabbed } from "@/components/web3/slabs";
 import { useTx } from "@/components/web3/tx";
@@ -20,6 +20,8 @@ import { catalog, fmt, games, type Game } from "@/lib/data";
 const BNB = 620;
 const sorts = ["newest", "price ↑", "price ↓"] as const;
 const listings = catalog.map((c, i) => ({ ...c, price: Math.round(c.value * (0.92 + ((i * 37) % 17) / 100)), seller: `0x${(9134 + i * 773).toString(16)}…${(41 + i * 13).toString(16)}`, age: i }));
+
+const ListModal = dynamic(() => import("@/components/web3/ListModal").then((m) => m.ListModal), { ssr: false });
 
 type OnchainListing = { id: bigint; seller: Address; token: Address; price: bigint; slab: Slabbed };
 
@@ -42,6 +44,7 @@ function useListings() {
 
 export default function Market() {
   const [listOpen, setListOpen] = useState(false);
+  const [listUsed, setListUsed] = useState(false);
   const { run, busy, address } = useTx();
   const { token: cata } = useCata();
   const chain = useListings();
@@ -70,14 +73,14 @@ export default function Market() {
   return (
     <Page>
       <PageHead kicker="market" title="slabs for sale." sub="peer to peer. every sale settles on-chain, 0.2% burns $cata.">
-        <Act need={["market", "vault"]} onClick={() => setListOpen(true)} className={btnPink}>list a card →</Act>
+        <Act need={["market", "vault"]} onClick={() => { setListUsed(true); setListOpen(true); }} className={btnPink}>list a card →</Act>
       </PageHead>
       <div className="mt-10 flex flex-col gap-3 rounded-[28px] bg-surface p-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap gap-2">
           {(["all", ...games] as const).map((g) => (
-            <button key={g} onClick={() => setGame(g)} className={`rounded-full px-4 py-2 text-sm transition ${game === g ? "bg-ink text-surface" : "bg-cream text-muted hover:text-ink"}`}>{g}</button>
+            <button key={g} onClick={() => setGame(g)} aria-pressed={game === g} className={`rounded-full px-4 py-2 text-sm transition pointer-coarse:min-h-11 ${game === g ? "bg-ink text-surface" : "bg-cream text-muted hover:text-ink"}`}>{g}</button>
           ))}
-          <button onClick={() => setPhysical(!physical)} className={`rounded-full px-4 py-2 text-sm transition ${physical ? "bg-pink text-surface" : "bg-cream text-muted hover:text-ink"}`}>physical only</button>
+          <button onClick={() => setPhysical(!physical)} aria-pressed={physical} className={`rounded-full px-4 py-2 text-sm transition pointer-coarse:min-h-11 ${physical ? "bg-pink text-surface" : "bg-cream text-muted hover:text-ink"}`}>physical only</button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="pl-2 font-mono text-[10px] uppercase tracking-widest text-muted">pay in</span>
@@ -86,50 +89,50 @@ export default function Market() {
         </div>
       </div>
       {live && (
-        <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
           {chain.data!.map((l) => {
             const mine = address && l.seller.toLowerCase() === address.toLowerCase();
             const amt = Number(formatUnits(l.price, 18));
             return (
               <div key={String(l.id)} className="rounded-[32px] bg-surface p-4 transition-shadow hover:shadow-[0_30px_60px_-30px_rgba(43,26,34,.4)]">
                 <Slab card={l.slab} />
-                <div className="mt-4 px-1">
-                  <div className="truncate font-medium">{l.slab.name}</div>
+                <div className="mt-3 px-0.5 min-[480px]:mt-4 min-[480px]:px-1">
+                  <div className="truncate text-[15px] font-medium min-[480px]:text-base">{l.slab.name}</div>
                   <div className="truncate font-mono text-xs text-muted">{l.slab.grader} {l.slab.grade} · token #{String(l.slab.tokenId)}</div>
-                  <div className="mt-3 flex items-end justify-between">
-                    <div><div className="font-mono text-xl">{amt.toLocaleString("en-US", { maximumFractionDigits: 4 })} {unit(l.token)}</div>{l.slab.valueUsd ? <div className="font-mono text-[11px] text-muted">index {fmt(l.slab.valueUsd)}</div> : null}</div>
-                    <div className="font-mono text-[10px] text-muted">{mine ? "you" : short(l.seller)}</div>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <div><div className="font-mono text-[15px] min-[480px]:text-xl">{amt.toLocaleString("en-US", { maximumFractionDigits: 4 })} {unit(l.token)}</div>{l.slab.valueUsd ? <div className="font-mono text-[11px] text-muted">index {fmt(l.slab.valueUsd)}</div> : null}</div>
+                    <div className="font-mono text-[10px] text-muted max-[479px]:hidden">{mine ? "you" : short(l.seller)}</div>
                   </div>
                 </div>
                 {mine
-                  ? <Act need={["market"]} onClick={() => cancel(l)} busy={busy} className="mt-4 w-full rounded-full border border-ink/20 py-2.5 transition hover:border-ink hover:bg-cream">cancel listing</Act>
-                  : <Act need={["market"]} onClick={() => buy(l)} busy={busy} disabled={unit(l.token) === "$cata" && !cata} className="mt-4 w-full rounded-full bg-ink py-2.5 text-surface transition hover:bg-pink">buy now</Act>}
+                  ? <Act need={["market"]} onClick={() => cancel(l)} busy={busy} className="mt-4 min-h-11 w-full rounded-full border border-ink/20 py-2.5 transition hover:border-ink hover:bg-cream">cancel listing</Act>
+                  : <Act need={["market"]} onClick={() => buy(l)} busy={busy} disabled={unit(l.token) === "$cata" && !cata} className="mt-4 min-h-11 w-full rounded-full bg-ink py-2.5 text-surface transition hover:bg-pink">buy now</Act>}
               </div>
             );
           })}
         </div>
       )}
-      {!live && <motion.div layout className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {!live && <motion.div layout className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
         {list.map((c, i) => (
           <motion.div key={c.id} layout transition={{ type: "spring", stiffness: 300, damping: 30 }}>
             <Reveal delay={(i % 4) * .05}>
-              <div className="rounded-[32px] bg-surface p-4 transition-shadow hover:shadow-[0_30px_60px_-30px_rgba(43,26,34,.4)]">
+              <div className="rounded-[24px] bg-surface p-2.5 transition-shadow min-[480px]:rounded-[32px] min-[480px]:p-4 hover:shadow-[0_30px_60px_-30px_rgba(43,26,34,.4)]">
                 <Slab card={c} />
-                <div className="mt-4 px-1">
-                  <div className="truncate font-medium">{c.name}</div>
+                <div className="mt-3 px-0.5 min-[480px]:mt-4 min-[480px]:px-1">
+                  <div className="truncate text-[15px] font-medium min-[480px]:text-base">{c.name}</div>
                   <div className="truncate font-mono text-xs text-muted">{c.grader} {c.grade} · {c.set}</div>
-                  <div className="mt-3 flex items-end justify-between">
-                    <div><div className="font-mono text-xl">{show(c.price)}</div><div className="font-mono text-[11px] text-muted">≈ {fmt(c.price)}</div></div>
-                    <div className="font-mono text-[10px] text-muted">{c.seller}</div>
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <div><div className="font-mono text-[15px] min-[480px]:text-xl">{show(c.price)}</div><div className="font-mono text-[11px] text-muted">≈ {fmt(c.price)}</div></div>
+                    <div className="shrink-0 font-mono text-[10px] text-muted max-[479px]:hidden">{c.seller}</div>
                   </div>
                 </div>
-                <Act need={["market"]} onClick={() => {}} disabled soonLabel={addresses.market ? "sample listing" : undefined} className="mt-4 w-full rounded-full bg-ink py-2.5 text-surface transition hover:bg-pink">buy now</Act>
+                <Act need={["market"]} onClick={() => {}} disabled soonLabel={addresses.market ? "sample listing" : undefined} className="mt-4 min-h-11 w-full rounded-full bg-ink py-2.5 text-surface transition hover:bg-pink">buy now</Act>
               </div>
             </Reveal>
           </motion.div>
         ))}
       </motion.div>}
-      <ListModal open={listOpen} onClose={() => setListOpen(false)} onListed={() => chain.refetch()} />
+      {listUsed && <ListModal open={listOpen} onClose={() => setListOpen(false)} onListed={() => chain.refetch()} />}
     </Page>
   );
 }

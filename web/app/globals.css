@@ -13,6 +13,42 @@
   --font-mono: var(--f-mono), "Martian Mono", ui-monospace, monospace;
 }
 
-html { background: #F5EDE0; }
-body { background: #F5EDE0; color: #2B1A22; font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+html {
+  background: #F5EDE0;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 5rem; /* sticky nav never covers an anchor target */
+}
+body {
+  background: #F5EDE0; color: #2B1A22; font-family: var(--font-sans); font-size: 16px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
+}
 ::selection { background: #F4C3D3; }
+h1, h2, h3 { overflow-wrap: break-word; text-wrap: balance; }
+img, svg, video { max-width: 100%; }
+
+/* visible keyboard focus everywhere, invisible for mouse/touch */
+:focus-visible { outline: 2px solid #E2487F; outline-offset: 3px; border-radius: 9999px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; border-radius: 1rem; }
+
+/* iOS zooms into inputs under 16px */
+@media (pointer: coarse) {
+  input, select, textarea { font-size: max(16px, 1em) !important; }
+}
+
+.skip-link {
+  position: fixed; left: 1rem; top: -4rem; z-index: 100;
+  border-radius: 9999px; background: #2B1A22; color: #FBF6EE; padding: .75rem 1.25rem; font-size: 15px;
+  transition: top .2s;
+}
+.skip-link:focus { top: max(.75rem, env(safe-area-inset-top)); }
+
+@utility pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important; scroll-behavior: auto !important;
+  }
+}

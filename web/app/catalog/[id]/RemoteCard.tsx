@@ -25,8 +25,8 @@ export function RemoteCard({ id }: { id: string }) {
   if (q.data) return <CardDetail c={q.data} />;
   return (
     <Page>
-      <Link href="/catalog" className="font-mono text-xs text-muted hover:text-pink">← catalog</Link>
-      <div className="mt-10 rounded-[32px] bg-surface p-10 text-center text-muted">
+      <Link href="/catalog" className="inline-flex min-h-11 items-center font-mono text-xs text-muted hover:text-pink">← catalog</Link>
+      <div className="mt-10 rounded-[32px] bg-surface p-10 text-center text-muted" aria-live="polite">
         {q.isError ? "we couldn't find that card. try the catalog search." : "loading card…"}
       </div>
     </Page>

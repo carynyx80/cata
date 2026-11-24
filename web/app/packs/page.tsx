@@ -6,7 +6,8 @@ import { Slab } from "@/components/Slab";
 import { Reveal } from "@/components/Reveal";
 import { Act } from "@/components/web3/Act";
 import { useTx } from "@/components/web3/tx";
-import { PackReveal, type Pending } from "@/components/web3/PackReveal";
+import dynamic from "next/dynamic";
+import type { Pending } from "@/components/web3/PackReveal";
 import { readContract } from "wagmi/actions";
 import { decodeEventLog, parseUnits, type Abi } from "viem";
 import { packMachineAbi } from "@/lib/abis";
@@ -20,6 +21,8 @@ const tiers = [
   { name: "grail", price: 250, tone: "bg-ink text-surface", odds: [["$150–250", "48%"], ["$250–750", "35%"], ["$750–2.5k", "14%"], ["$2.5k+", "3%"]], left: 57 },
 ];
 const pays = ["bnb", "usdt", "$cata"] as const;
+// only needed after a pack is bought
+const PackReveal = dynamic(() => import("@/components/web3/PackReveal").then((m) => m.PackReveal), { ssr: false });
 
 /** Match a tier to a backend/on-chain pool by name, else by position. */
 const poolFor = (pools: ApiPool[] | undefined, name: string, i: number) =>
@@ -62,19 +65,19 @@ export default function Packs() {
     }
   };
   return (
-    <div className="mx-auto max-w-7xl px-4 pt-16 md:px-8">
+    <div className="mx-auto max-w-7xl px-4 pt-10 sm:pt-16 md:px-8">
       <Reveal>
         <p className="font-mono text-xs uppercase tracking-[.2em] text-pink">packs</p>
-        <h1 className="mt-4 font-display text-[clamp(2.8rem,7vw,6rem)] leading-[.95]">pick your rip.</h1>
-        <p className="mt-5 max-w-xl text-xl text-muted">published odds. public pools. every pull settled by chainlink vrf. don&apos;t love it? sell it back for 85%.</p>
+        <h1 className="mt-4 font-display text-[clamp(2.4rem,9vw,6rem)] leading-[.95]">pick your rip.</h1>
+        <p className="mt-5 max-w-xl text-lg text-muted sm:text-xl">published odds. public pools. every pull settled by chainlink vrf. don&apos;t love it? sell it back for 85%.</p>
       </Reveal>
 
-      <div className="mt-10 inline-flex rounded-full bg-surface p-1.5 font-mono text-sm">
+      <div role="group" aria-label="pay with" className="mt-8 inline-flex max-w-full rounded-full bg-surface p-1.5 font-mono text-sm sm:mt-10">
         {pays.map((p) => {
           const soon = p === "$cata";
           return (
-            <button key={p} disabled={soon} onClick={() => setPay(p)}
-              className={`relative rounded-full px-5 py-2 transition ${soon ? "cursor-not-allowed text-muted/50" : "hover:text-ink"} ${pay === p ? "text-surface" : "text-muted"}`}>
+            <button key={p} disabled={soon} onClick={() => setPay(p)} aria-pressed={pay === p}
+              className={`relative min-h-10 rounded-full px-4 py-2 transition pointer-coarse:min-h-11 sm:px-5 ${soon ? "cursor-not-allowed text-muted/50" : "hover:text-ink"} ${pay === p ? "text-surface" : "text-muted"}`}>
               {pay === p && <motion.span layoutId="pay" className="absolute inset-0 rounded-full bg-ink" transition={{ type: "spring", stiffness: 400, damping: 30 }} />}
               <span className="relative">{p}{soon && <span className="ml-1.5 text-[10px]">soon</span>}</span>
             </button>
@@ -82,20 +85,21 @@ export default function Packs() {
         })}
       </div>
 
-      <div className="mt-8 grid gap-5 lg:grid-cols-3">
+      <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {tiers.map((t, i) => {
           const pool = poolFor(onchain ? poolList : undefined, t.name, i);
           const price = pool?.priceUsd ?? t.price;
           const left = pool?.cardsLeft ?? t.left;
           return (
           <Reveal key={t.name} delay={i * .08}>
-            <div className={`group relative h-full rounded-[36px] p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_40px_70px_-35px_rgba(43,26,34,.5)] ${t.tone}`}>
-              {t.hot && <span className="absolute right-6 top-6 rounded-full bg-pink px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-surface">most ripped</span>}
+            <div className={`group relative h-full rounded-[32px] p-6 transition-all sm:rounded-[36px] sm:p-8 duration-300 hover:-translate-y-2 hover:shadow-[0_40px_70px_-35px_rgba(43,26,34,.5)] ${t.tone}`}>
+              {t.hot && <span className="absolute right-5 top-5 rounded-full bg-pink sm:right-6 sm:top-6 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-surface">most ripped</span>}
               <div className="font-mono text-xs uppercase tracking-[.2em] opacity-70">{t.name}</div>
-              <div className="mt-6 font-display text-6xl">${price.toLocaleString("en-US")}</div>
+              <div className="mt-6 font-display text-[clamp(3rem,14vw,3.75rem)] leading-none">${price.toLocaleString("en-US")}</div>
               <div className="mt-1 font-mono text-xs opacity-60">paid in {pay} · +0.2% burn fee</div>
               <table className="mt-8 w-full font-mono text-sm">
-                <thead><tr className="text-left text-[10px] uppercase tracking-widest opacity-60"><th className="pb-2 font-normal">pull value</th><th className="pb-2 text-right font-normal">odds</th></tr></thead>
+                <caption className="sr-only">{t.name} pack odds</caption>
+                <thead><tr className="text-left text-[10px] uppercase tracking-widest opacity-60"><th scope="col" className="pb-2 font-normal">pull value</th><th scope="col" className="pb-2 text-right font-normal">odds</th></tr></thead>
                 <tbody>{t.odds.map(([v, o]) => (
                   <tr key={v} className="border-t border-current/10"><td className="py-2.5">{v}</td><td className="py-2.5 text-right">{o}</td></tr>
                 ))}</tbody>
@@ -111,7 +115,7 @@ export default function Packs() {
         })}
       </div>
 
-      <section className="mt-24">
+      <section className="mt-16 sm:mt-24">
         <Reveal>
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -121,7 +125,7 @@ export default function Packs() {
             <div className="font-mono text-sm text-muted">238 left · 762 pulled · pool value {fmt(48210)}</div>
           </div>
         </Reveal>
-        <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-6 min-[480px]:grid-cols-3 sm:grid-cols-4 sm:gap-5 lg:grid-cols-8">
           {cards.map((c, i) => (
             <Reveal key={c.id} delay={i * .04}>
               <Slab card={c} className="!border-[4px] !p-2" />
@@ -130,7 +134,7 @@ export default function Packs() {
           ))}
         </div>
       </section>
-      <PackReveal key={pending ? String(pending.creditId) : "none"} pending={pending} onClose={() => setPending(null)} />
+      {pending && <PackReveal key={String(pending.creditId)} pending={pending} onClose={() => setPending(null)} />}
     </div>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
+import { MotionConfig } from "framer-motion";
 import { WagmiProvider, useReadContract } from "wagmi";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { zeroAddress, isAddress, type Address } from "viem";
@@ -8,7 +10,9 @@ import { addresses } from "@/lib/contracts";
 import { cataConfigAbi } from "@/lib/abis";
 import { api, type ApiConfig } from "@/lib/api";
 import { ToastProvider } from "./Toasts";
-import { ConnectModal } from "./ConnectModal";
+
+// the wallet picker is only fetched the first time someone asks to connect
+const ConnectModal = dynamic(() => import("./ConnectModal").then((m) => m.ConnectModal), { ssr: false });
 
 type Ui = { openConnect: () => void; closeConnect: () => void; connectOpen: boolean };
 const UiCtx = createContext<Ui>({ openConnect: () => {}, closeConnect: () => {}, connectOpen: false });
@@ -40,21 +44,24 @@ function CataProvider({ children }: { children: ReactNode }) {
 export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } }));
   const [connectOpen, setOpen] = useState(false);
-  const openConnect = useCallback(() => setOpen(true), []);
+  const [wanted, setWanted] = useState(false);
+  const openConnect = useCallback(() => { setWanted(true); setOpen(true); }, []);
   const closeConnect = useCallback(() => setOpen(false), []);
   const ui = useMemo(() => ({ openConnect, closeConnect, connectOpen }), [openConnect, closeConnect, connectOpen]);
   return (
+    <MotionConfig reducedMotion="user">
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={qc}>
         <CataProvider>
           <ToastProvider>
             <UiCtx.Provider value={ui}>
               {children}
-              <ConnectModal />
+              {wanted && <ConnectModal />}
             </UiCtx.Provider>
           </ToastProvider>
         </CataProvider>
       </QueryClientProvider>
     </WagmiProvider>
+    </MotionConfig>
   );
 }
