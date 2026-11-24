@@ -50,7 +50,8 @@ contract GiftPacks is CataPayments {
     }
 
     /// @notice BNB: send >= packs.quote(poolId, 0); any excess is refunded.
-    function buyGift(uint256 poolId, address token, address claimSigner)
+    /// @param maxPriceUsd reverts if the pool's USD price is above this.
+    function buyGift(uint256 poolId, address token, address claimSigner, uint256 maxPriceUsd)
         external
         payable
         nonReentrant
@@ -61,7 +62,7 @@ contract GiftPacks is CataPayments {
         uint256 creditId;
         if (token == address(0)) {
             uint256 balBefore = address(this).balance - msg.value;
-            creditId = packs.buyCredit{value: msg.value}(poolId, address(0), address(this));
+            creditId = packs.buyCredit{value: msg.value}(poolId, address(0), address(this), maxPriceUsd);
             uint256 refund = address(this).balance - balBefore;
             _push(address(0), msg.sender, refund);
         } else {
@@ -69,7 +70,7 @@ contract GiftPacks is CataPayments {
             uint256 amount = packs.quote(poolId, token);
             IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
             IERC20(token).forceApprove(address(packs), amount);
-            creditId = packs.buyCredit(poolId, token, address(this));
+            creditId = packs.buyCredit(poolId, token, address(this), maxPriceUsd);
         }
         giftId = _gifts.length;
         _gifts.push(Gift(msg.sender, claimSigner, creditId, false));

@@ -20,6 +20,7 @@ abstract contract CataPayments is ReentrancyGuard {
     error TokenNotAllowed(address token);
     error BadMsgValue();
     error NativeTransferFailed();
+    error TreasuryNotSet();
 
     constructor(ICataConfig config_) {
         config = config_;
@@ -63,7 +64,9 @@ abstract contract CataPayments is ReentrancyGuard {
     function _takeFee(address token, uint256 amount) internal returns (uint256 net) {
         uint256 fee = (amount * config.feeBps()) / 10_000;
         if (fee > 0) {
-            _push(token, config.treasury(), fee);
+            address t = config.treasury();
+            if (t == address(0)) revert TreasuryNotSet();
+            _push(token, t, fee);
             emit FeeTaken(token, fee);
         }
         net = amount - fee;

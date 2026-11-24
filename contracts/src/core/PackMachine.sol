@@ -48,7 +48,15 @@ contract PackMachine is CataPayments, IERC721Receiver {
         bool soldBack;
     }
 
+    enum RequestStatus {
+        None,
+        Pending,
+        Fulfilled,
+        Cancelled // superseded by retryOpen; a late fulfillment is ignored
+    }
+
     uint16 public constant SELLBACK_BPS = 8500;
+    uint256 public constant RETRY_TIMEOUT = 1 hours;
 
     ICataVault public immutable vault;
     ICataPriceIndex public immutable priceIndex;
@@ -77,7 +85,11 @@ contract PackMachine is CataPayments, IERC721Receiver {
     mapping(uint256 => address) public requestRecipient;
     mapping(uint256 => Pull) public pulls; // tokenId => last pull
     mapping(address => mapping(address => uint256)) public owed; // token => account => amount
-    mapping(uint256 => uint256) public pendingOpens; // poolId => VRF requests in flight
+    mapping(uint256 => uint256) public pendingOpens; // poolId => credits with a VRF request in flight
+    mapping(uint256 => uint256) public cardIndex; // tokenId => index in its pool's card array + 1, 0 = none
+    mapping(uint256 => RequestStatus) public requestStatus; // vrf requestId => status
+    mapping(uint256 => uint256) public requestedAt; // vrf requestId => timestamp
+    mapping(uint256 => uint256) public creditRequest; // creditId => current (latest) vrf requestId
 
     event PoolCreated(uint256 indexed poolId, string name, uint256 priceUsd);
     event PoolUpdated(uint256 indexed poolId, uint256 priceUsd, bool active);
@@ -86,6 +98,8 @@ contract PackMachine is CataPayments, IERC721Receiver {
     event CreditBought(uint256 indexed creditId, uint256 indexed poolId, address indexed holder, address token, uint256 paid);
     event CreditTransferred(uint256 indexed creditId, address indexed to);
     event OpenRequested(uint256 indexed creditId, uint256 indexed requestId, address indexed recipient);
+    event OpenRetried(uint256 indexed creditId, uint256 indexed oldRequestId, uint256 indexed newRequestId);
+    event RequestIgnored(uint256 indexed requestId);
     event PackOpened(uint256 indexed creditId, uint256 indexed poolId, address indexed recipient, uint256 tokenId);
     event SoldBack(uint256 indexed tokenId, address indexed seller, uint256 usdtPaid);
     event ReserveFunded(uint256 amount);
@@ -107,6 +121,10 @@ contract PackMachine is CataPayments, IERC721Receiver {
     error NotOperator();
     error OpenPending();
     error BadRecipient();
+    error PriceAboveMax(uint256 priceUsd, uint256 maxPriceUsd);
+    error NotPending();
+    error RetryTooEarly();
+    error NotAuthorized();
 
     constructor(
         ICataConfig config_,
@@ -250,13 +268,7 @@ contract PackMachine is CataPayments, IERC721Receiver {
         }
         if (available(poolId) == 0) revert Reserved();
         if (pendingOpens[poolId] != 0) revert OpenPending();
-        uint256[] storage cards = _poolCards[poolId];
-        for (uint256 i; i < cards.length; ++i) {
-            if (cards[i] == tokenId) {
-                _removeAt(poolId, i);
-                break;
-            }
-        }
+        _removeAt(poolId, cardIndex[tokenId] - 1);
         vault.safeTransferFrom(address(this), msg.sender, tokenId);
         emit CardWithdrawn(poolId, tokenId, msg.sender);
     }
@@ -266,6 +278,7 @@ contract PackMachine is CataPayments, IERC721Receiver {
         if (pendingOpens[poolId] != 0) revert OpenPending();
         vault.transferFrom(msg.sender, address(this), tokenId);
         _poolCards[poolId].push(tokenId);
+        cardIndex[tokenId] = _poolCards[poolId].length;
         poolOfToken[tokenId] = poolId + 1;
         stockOf[tokenId] = Stock(depositor, ask);
         emit CardDeposited(poolId, tokenId, depositor, ask);
@@ -274,33 +287,40 @@ contract PackMachine is CataPayments, IERC721Receiver {
     function _removeAt(uint256 poolId, uint256 i) internal returns (uint256 tokenId) {
         uint256[] storage cards = _poolCards[poolId];
         tokenId = cards[i];
-        cards[i] = cards[cards.length - 1];
+        uint256 last = cards.length - 1;
+        if (i != last) {
+            uint256 moved = cards[last];
+            cards[i] = moved;
+            cardIndex[moved] = i + 1;
+        }
         cards.pop();
+        delete cardIndex[tokenId];
         delete poolOfToken[tokenId];
     }
 
     // ---------------------------------------------------------------- buying / opening
 
     /// @notice Buy a pack credit for `to` (e.g. GiftPacks). BNB: send >= quote, excess refunded to msg.sender.
-    function buyCredit(uint256 poolId, address token, address to)
+    /// @param maxPriceUsd reverts if the pool's USD price (18 dec) is above this (protects against price changes).
+    function buyCredit(uint256 poolId, address token, address to, uint256 maxPriceUsd)
         external
         payable
         nonReentrant
         whenActive(Features.PACKS)
         returns (uint256 creditId)
     {
-        creditId = _buyCredit(poolId, token, to);
+        creditId = _buyCredit(poolId, token, to, maxPriceUsd);
     }
 
     /// @notice Buy and open one pack for msg.sender.
-    function open(uint256 poolId, address token)
+    function open(uint256 poolId, address token, uint256 maxPriceUsd)
         external
         payable
         nonReentrant
         whenActive(Features.PACKS)
         returns (uint256 requestId)
     {
-        uint256 creditId = _buyCredit(poolId, token, msg.sender);
+        uint256 creditId = _buyCredit(poolId, token, msg.sender, maxPriceUsd);
         requestId = _openCredit(creditId, msg.sender);
     }
 
@@ -323,8 +343,12 @@ contract PackMachine is CataPayments, IERC721Receiver {
         emit CreditTransferred(creditId, to);
     }
 
-    function _buyCredit(uint256 poolId, address token, address to) internal returns (uint256 creditId) {
+    function _buyCredit(uint256 poolId, address token, address to, uint256 maxPriceUsd)
+        internal
+        returns (uint256 creditId)
+    {
         if (poolId >= _pools.length || !_pools[poolId].active) revert BadPool();
+        if (_pools[poolId].priceUsd > maxPriceUsd) revert PriceAboveMax(_pools[poolId].priceUsd, maxPriceUsd);
         if (token != address(0) && token != config.usdt()) revert TokenNotAllowed(token);
         if (available(poolId) == 0) revert PoolEmpty();
         uint256 amount = quote(poolId, token);
@@ -350,6 +374,11 @@ contract PackMachine is CataPayments, IERC721Receiver {
         if (recipient == address(0)) revert BadRecipient();
         c.used = true;
         pendingOpens[c.poolId] += 1;
+        requestId = _request(creditId, recipient);
+        emit OpenRequested(creditId, requestId, recipient);
+    }
+
+    function _request(uint256 creditId, address recipient) internal returns (uint256 requestId) {
         requestId = coordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: keyHash,
@@ -362,14 +391,40 @@ contract PackMachine is CataPayments, IERC721Receiver {
         );
         requestCredit[requestId] = creditId + 1;
         requestRecipient[requestId] = recipient;
-        emit OpenRequested(creditId, requestId, recipient);
+        requestStatus[requestId] = RequestStatus.Pending;
+        requestedAt[requestId] = block.timestamp;
+        creditRequest[creditId] = requestId;
+    }
+
+    /// @notice Re-request randomness for an open whose VRF callback never arrived (e.g. it reverted / ran out of
+    ///         gas / the subscription was underfunded). Callable by the credit holder, the recipient, or the owner,
+    ///         after RETRY_TIMEOUT. The old requestId is cancelled; if it arrives late it is ignored.
+    ///         pendingOpens is unchanged: the credit is still a single in-flight open.
+    function retryOpen(uint256 requestId) external nonReentrant returns (uint256 newRequestId) {
+        if (requestStatus[requestId] != RequestStatus.Pending) revert NotPending();
+        if (block.timestamp < requestedAt[requestId] + RETRY_TIMEOUT) revert RetryTooEarly();
+        uint256 creditId = requestCredit[requestId] - 1;
+        address recipient = requestRecipient[requestId];
+        if (msg.sender != _credits[creditId].holder && msg.sender != recipient && msg.sender != config.owner()) {
+            revert NotAuthorized();
+        }
+        requestStatus[requestId] = RequestStatus.Cancelled;
+        delete requestCredit[requestId];
+        delete requestRecipient[requestId];
+        newRequestId = _request(creditId, recipient);
+        emit OpenRetried(creditId, requestId, newRequestId);
     }
 
     /// @notice Chainlink VRF v2.5 callback entry point.
     function rawFulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) external {
         if (msg.sender != address(coordinator)) revert OnlyCoordinator();
+        // never revert on stale / unknown / superseded ids: just ignore them
+        if (requestStatus[requestId] != RequestStatus.Pending || randomWords.length == 0) {
+            emit RequestIgnored(requestId);
+            return;
+        }
+        requestStatus[requestId] = RequestStatus.Fulfilled;
         uint256 c1 = requestCredit[requestId];
-        if (c1 == 0) revert UnknownRequest();
         delete requestCredit[requestId];
         address recipient = requestRecipient[requestId];
         delete requestRecipient[requestId];

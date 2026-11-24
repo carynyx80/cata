@@ -13,6 +13,19 @@ export const cataPointsAbi = [
   },
   {
     "type": "function",
+    "name": "DEAD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "award",
     "inputs": [
       {
@@ -76,6 +89,25 @@ export const cataPointsAbi = [
   },
   {
     "type": "function",
+    "name": "isAwarder",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "points",
     "inputs": [
       {
@@ -92,6 +124,24 @@ export const cataPointsAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setAwarder",
+    "inputs": [
+      {
+        "name": "a",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "enabled",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -136,6 +186,25 @@ export const cataPointsAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AwarderSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "enabled",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -221,6 +290,11 @@ export const cataPointsAbi = [
   },
   {
     "type": "error",
+    "name": "BadDestination",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadMsgValue",
     "inputs": []
   },
@@ -257,7 +331,7 @@ export const cataPointsAbi = [
   },
   {
     "type": "error",
-    "name": "NotOperator",
+    "name": "NotAwarder",
     "inputs": []
   },
   {
@@ -296,5 +370,10 @@ export const cataPointsAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TreasuryNotSet",
+    "inputs": []
   }
 ] as const;

@@ -6,14 +6,17 @@ import {ICataConfig} from "../interfaces/ICataConfig.sol";
 import {Features} from "../lib/Features.sol";
 
 /// @title CataConfig — global settings, roles, feature flags and the one-time $CATA activation lock.
+/// @dev Money rules that are NOT owner-adjustable (SPEC: "0.2% fee, 100% to buyback"):
+///      - the fee is a constant 20 bps (no setter);
+///      - the treasury (CataTreasury, which can only buy back + burn) is set once and then locked forever.
 contract CataConfig is ICataConfig, Ownable {
-    uint16 public constant MAX_FEE_BPS = 100;
+    uint16 public constant FEE_BPS = 20;
 
-    address public treasury;
+    address public treasury; // set once (constructor or setTreasury), then locked
+    bool public treasuryLocked;
     address public companyWallet;
     address public immutable usdt;
     address public cataToken; // address(0) until activateCata; then locked forever
-    uint16 public feeBps = 20;
     bool public paused;
 
     mapping(bytes32 => bool) private _features;
@@ -23,7 +26,6 @@ contract CataConfig is ICataConfig, Ownable {
     event CataActivated(address indexed token);
     event TreasurySet(address treasury);
     event CompanyWalletSet(address wallet);
-    event FeeBpsSet(uint16 feeBps);
     event PausedSet(bool paused);
     event FeatureSet(bytes32 indexed feature, bool enabled);
     event OracleSet(address indexed account, bool enabled);
@@ -31,13 +33,21 @@ contract CataConfig is ICataConfig, Ownable {
 
     error ZeroAddress();
     error AlreadyActivated();
-    error FeeTooHigh();
+    error TreasuryLocked();
+    error NotAContract();
+    error NotAToken();
 
     constructor(address owner_, address companyWallet_, address usdt_, address treasury_) Ownable(owner_) {
         if (companyWallet_ == address(0) || usdt_ == address(0)) revert ZeroAddress();
         companyWallet = companyWallet_;
         usdt = usdt_;
-        treasury = treasury_ == address(0) ? companyWallet_ : treasury_;
+        // treasury_ may be address(0) when the treasury contract is deployed after this config (it needs the
+        // config address); it must then be set exactly once with setTreasury. Fee-taking reverts until then.
+        if (treasury_ != address(0)) {
+            treasury = treasury_;
+            treasuryLocked = true;
+            emit TreasurySet(treasury_);
+        }
         _features[Features.PACKS] = true;
         _features[Features.MARKET] = true;
         _features[Features.GIFTS] = true;
@@ -59,17 +69,30 @@ contract CataConfig is ICataConfig, Ownable {
         return _features[feature];
     }
 
-    /// @notice One-time, irreversible activation of $CATA.
+    /// @notice Fixed protocol fee: 20 bps. Not adjustable.
+    function feeBps() external pure returns (uint16) {
+        return FEE_BPS;
+    }
+
+    /// @notice One-time, irreversible activation of $CATA. `token` must be a deployed ERC-20 contract.
     function activateCata(address token) external onlyOwner {
         if (token == address(0)) revert ZeroAddress();
         if (cataToken != address(0)) revert AlreadyActivated();
+        if (token.code.length == 0) revert NotAToken();
+        (bool okD, bytes memory d) = token.staticcall(abi.encodeWithSignature("decimals()"));
+        (bool okS, bytes memory t) = token.staticcall(abi.encodeWithSignature("totalSupply()"));
+        if (!okD || d.length < 32 || !okS || t.length < 32) revert NotAToken();
         cataToken = token;
         emit CataActivated(token);
     }
 
+    /// @notice One-time treasury wiring (only if not given at construction). Locked forever afterwards.
     function setTreasury(address t) external onlyOwner {
+        if (treasuryLocked) revert TreasuryLocked();
         if (t == address(0)) revert ZeroAddress();
+        if (t.code.length == 0) revert NotAContract();
         treasury = t;
+        treasuryLocked = true;
         emit TreasurySet(t);
     }
 
@@ -77,12 +100,6 @@ contract CataConfig is ICataConfig, Ownable {
         if (w == address(0)) revert ZeroAddress();
         companyWallet = w;
         emit CompanyWalletSet(w);
-    }
-
-    function setFeeBps(uint16 bps) external onlyOwner {
-        if (bps > MAX_FEE_BPS) revert FeeTooHigh();
-        feeBps = bps;
-        emit FeeBpsSet(bps);
     }
 
     function setPaused(bool p) external onlyOwner {

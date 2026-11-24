@@ -39,7 +39,7 @@ contract AuditPacksTest is CoreTest {
         (uint256 poolId, uint256 c) = _pool();
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 req = packs.open(poolId, address(usdt));
+        uint256 req = packs.open(poolId, address(usdt), type(uint256).max);
         vm.stopPrank();
 
         // attacker tries to reshape the pool before fulfillment
@@ -64,7 +64,7 @@ contract AuditPacksTest is CoreTest {
         (uint256 poolId,) = _pool();
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 creditId = packs.buyCredit(poolId, address(usdt), bob);
+        uint256 creditId = packs.buyCredit(poolId, address(usdt), bob, type(uint256).max);
         vm.expectRevert(PackMachine.BadRecipient.selector);
         packs.openCredit(creditId, address(0));
         vm.stopPrank();

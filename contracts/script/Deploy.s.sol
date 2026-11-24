@@ -14,7 +14,7 @@ import {GiftPacks} from "../src/core/GiftPacks.sol";
 
 /// @notice Deploys the core in order, wires roles, then hands ownership to the company wallet.
 /// Env: PRIVATE_KEY (required, never committed), VRF_COORDINATOR, VRF_KEY_HASH, VRF_SUB_ID, BNB_USD_FEED,
-///      optional: OWNER, USDT, PANCAKE_ROUTER, ORACLE, OPERATOR, VAULT_BASE_URI.
+///      optional: OWNER, USDT, PANCAKE_ROUTER, ORACLE, OPERATOR, VAULT_BASE_URI, MAX_BUYBACK_BNB, MAX_BUYBACK_USDT.
 contract Deploy is Script {
     address constant COMPANY = 0x106342ec570E207afDa9fDA63125d7a9071127f2;
     address constant USDT_BSC = 0x55d398326f99059fF775485246999027B3197955;
@@ -38,7 +38,7 @@ contract Deploy is Script {
         // deployer owns temporarily to wire roles; ownership moves to finalOwner at the end
         CataConfig cfg = new CataConfig(deployer, COMPANY, usdt, address(0));
         CataTreasury treasury = new CataTreasury(cfg, router);
-        cfg.setTreasury(address(treasury));
+        cfg.setTreasury(address(treasury)); // one-time: locked forever after this call
         CataVault vault = new CataVault(cfg, baseURI);
         CataPriceIndex index = new CataPriceIndex(cfg);
         CataPoints points = new CataPoints(cfg);
@@ -47,9 +47,13 @@ contract Deploy is Script {
         PackMachine packs = new PackMachine(cfg, vault, index, points, coordinator, keyHash, subId, feed);
         GiftPacks gifts = new GiftPacks(cfg, packs);
 
-        cfg.setOperator(address(packs), true); // awards points
-        cfg.setOperator(address(sets), true); // awards points
-        if (operator != address(0)) cfg.setOperator(operator, true); // mints slabs / stocks pools
+        // PackMachine / SetRewards only need to award points: CataPoints awarder role, NOT the global operator role
+        points.setAwarder(address(packs), true);
+        points.setAwarder(address(sets), true);
+        // buyback guards: per-call caps (0 = disabled); tune after $CATA liquidity exists
+        treasury.setMaxBuybackIn(address(0), vm.envOr("MAX_BUYBACK_BNB", uint256(5 ether)));
+        treasury.setMaxBuybackIn(usdt, vm.envOr("MAX_BUYBACK_USDT", uint256(3_000e18)));
+        if (operator != address(0)) cfg.setOperator(operator, true); // mints slabs / stocks pools / resolves markets
         if (oracle != address(0)) cfg.setOracle(oracle, true);
         if (finalOwner != deployer) cfg.transferOwnership(finalOwner);
         vm.stopBroadcast();

@@ -28,7 +28,7 @@ export const cataConfigAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_FEE_BPS",
+    "name": "FEE_BPS",
     "inputs": [],
     "outputs": [
       {
@@ -121,7 +121,7 @@ export const cataConfigAbi = [
         "internalType": "uint16"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -227,19 +227,6 @@ export const cataConfigAbi = [
   },
   {
     "type": "function",
-    "name": "setFeeBps",
-    "inputs": [
-      {
-        "name": "bps",
-        "type": "uint16",
-        "internalType": "uint16"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setOperator",
     "inputs": [
       {
@@ -328,6 +315,19 @@ export const cataConfigAbi = [
   },
   {
     "type": "function",
+    "name": "treasuryLocked",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "usdt",
     "inputs": [],
     "outputs": [
@@ -380,19 +380,6 @@ export const cataConfigAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
-    "name": "FeeBpsSet",
-    "inputs": [
-      {
-        "name": "feeBps",
-        "type": "uint16",
-        "indexed": false,
-        "internalType": "uint16"
       }
     ],
     "anonymous": false
@@ -487,7 +474,12 @@ export const cataConfigAbi = [
   },
   {
     "type": "error",
-    "name": "FeeTooHigh",
+    "name": "NotAContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotAToken",
     "inputs": []
   },
   {
@@ -511,6 +503,11 @@ export const cataConfigAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "TreasuryLocked",
+    "inputs": []
   },
   {
     "type": "error",

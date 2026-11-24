@@ -32,6 +32,19 @@ contract PaymentsHarness is CataPayments {
     }
 }
 
+/// @dev MockRouter + a getAmountsOut spot quote (same fixed rate the swap pays).
+contract QuotingRouter is MockRouter {
+    constructor(address weth) MockRouter(weth) {}
+
+    function getAmountsOut(uint256 amountIn, address[] calldata path) external view returns (uint256[] memory a) {
+        a = new uint256[](path.length);
+        a[0] = amountIn;
+        for (uint256 i = 1; i < path.length; ++i) {
+            a[i] = i == path.length - 1 ? amountIn * rate : amountIn;
+        }
+    }
+}
+
 contract CoreTest is Test {
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
     address owner = address(0x106342ec570E207afDa9fDA63125d7a9071127f2);
@@ -53,13 +66,13 @@ contract CoreTest is Test {
     GiftPacks giftPacks;
     MockVRFCoordinator vrf;
     MockAggregator feed;
-    MockRouter router;
+    QuotingRouter router;
 
     function setUp() public {
         usdt = new MockERC20("USDT", "USDT");
         cata = new MockERC20("CATA", "CATA");
         wbnb = new MockERC20("WBNB", "WBNB");
-        router = new MockRouter(address(wbnb));
+        router = new QuotingRouter(address(wbnb));
         vrf = new MockVRFCoordinator();
         feed = new MockAggregator(600e8); // $600 / BNB
 
@@ -75,8 +88,11 @@ contract CoreTest is Test {
         packs = new PackMachine(cfg, vault, index, points, address(vrf), bytes32("kh"), 1, address(feed));
         giftPacks = new GiftPacks(cfg, packs);
         cfg.setOperator(owner, true);
-        cfg.setOperator(address(packs), true);
-        cfg.setOperator(address(sets), true);
+        points.setAwarder(address(packs), true);
+        points.setAwarder(address(sets), true);
+        points.setAwarder(owner, true);
+        treasury.setMaxBuybackIn(address(0), 100 ether);
+        treasury.setMaxBuybackIn(address(usdt), 100_000e18);
         cfg.setOracle(oracle, true);
         vm.stopPrank();
 
@@ -119,13 +135,9 @@ contract CoreTest is Test {
         assertEq(address(treasury).balance, 0.002 ether);
     }
 
-    function test_FeeBpsBounds() public {
-        vm.prank(owner);
-        vm.expectRevert(CataConfig.FeeTooHigh.selector);
-        cfg.setFeeBps(101);
-        vm.prank(alice);
-        vm.expectRevert();
-        cfg.setFeeBps(10);
+    function test_FeeBpsFixed() public view {
+        assertEq(cfg.feeBps(), 20);
+        assertEq(cfg.FEE_BPS(), 20);
     }
 
     function test_ActivateCataOnce() public {
@@ -282,7 +294,7 @@ contract CoreTest is Test {
         assertEq(packs.poolCards(poolId).length, 3);
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 req = packs.open(poolId, address(usdt));
+        uint256 req = packs.open(poolId, address(usdt), type(uint256).max);
         vm.stopPrank();
         assertEq(usdt.balanceOf(address(treasury)), 0.2e18);
         assertEq(points.points(bob), 10);
@@ -312,7 +324,7 @@ contract CoreTest is Test {
         assertEq(q, 166666666666666667); // $100 / $600, rounded up
         uint256 before = bob.balance;
         vm.prank(bob);
-        uint256 req = packs.open{value: 1 ether}(poolId, address(0));
+        uint256 req = packs.open{value: 1 ether}(poolId, address(0), type(uint256).max);
         assertEq(before - bob.balance, q);
         assertEq(address(treasury).balance, (q * 20) / 10_000);
         vrf.fulfill(req, 0);
@@ -322,11 +334,11 @@ contract CoreTest is Test {
         (uint256 poolId,,,) = _setupPool();
         vm.startPrank(bob);
         usdt.approve(address(packs), type(uint256).max);
-        packs.open(poolId, address(usdt));
-        packs.open(poolId, address(usdt));
-        packs.open(poolId, address(usdt));
+        packs.open(poolId, address(usdt), type(uint256).max);
+        packs.open(poolId, address(usdt), type(uint256).max);
+        packs.open(poolId, address(usdt), type(uint256).max);
         vm.expectRevert(PackMachine.PoolEmpty.selector);
-        packs.open(poolId, address(usdt));
+        packs.open(poolId, address(usdt), type(uint256).max);
         vm.stopPrank();
     }
 
@@ -334,7 +346,7 @@ contract CoreTest is Test {
         (uint256 poolId,,,) = _setupPool();
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 req = packs.open(poolId, address(usdt));
+        uint256 req = packs.open(poolId, address(usdt), type(uint256).max);
         uint256[] memory w = new uint256[](1);
         vm.expectRevert(PackMachine.OnlyCoordinator.selector);
         packs.rawFulfillRandomWords(req, w);
@@ -356,7 +368,7 @@ contract CoreTest is Test {
 
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 req = packs.open(poolId, address(usdt));
+        uint256 req = packs.open(poolId, address(usdt), type(uint256).max);
         vm.stopPrank();
         vrf.fulfill(req, 0); // card A
         assertEq(vault.ownerOf(a), bob);
@@ -382,7 +394,7 @@ contract CoreTest is Test {
         (uint256 poolId, uint256 a,,) = _setupPool();
         vm.startPrank(bob);
         usdt.approve(address(packs), 100e18);
-        uint256 req = packs.open(poolId, address(usdt));
+        uint256 req = packs.open(poolId, address(usdt), type(uint256).max);
         vm.stopPrank();
         vrf.fulfill(req, 0);
         vm.warp(block.timestamp + 2 hours);
@@ -397,14 +409,14 @@ contract CoreTest is Test {
         cfg.setPaused(true);
         vm.prank(bob);
         vm.expectRevert(CataPayments.Paused.selector);
-        packs.open(poolId, address(usdt));
+        packs.open(poolId, address(usdt), type(uint256).max);
         vm.startPrank(owner);
         cfg.setPaused(false);
         cfg.setFeature(Features.PACKS, false);
         vm.stopPrank();
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(CataPayments.FeatureDisabled.selector, Features.PACKS));
-        packs.open(poolId, address(usdt));
+        packs.open(poolId, address(usdt), type(uint256).max);
     }
 
     // ---------------------------------------------------------- gifts
@@ -414,7 +426,7 @@ contract CoreTest is Test {
         (address signer, uint256 pk) = makeAddrAndKey("giftlink");
         vm.startPrank(alice);
         usdt.approve(address(giftPacks), 100e18);
-        uint256 gid = giftPacks.buyGift(poolId, address(usdt), signer);
+        uint256 gid = giftPacks.buyGift(poolId, address(usdt), signer, type(uint256).max);
         vm.stopPrank();
 
         // wrong recipient binding fails
@@ -439,7 +451,7 @@ contract CoreTest is Test {
         uint256 q = packs.quote(poolId, address(0));
         uint256 before = alice.balance;
         vm.prank(alice);
-        uint256 gid = giftPacks.buyGift{value: 1 ether}(poolId, address(0), address(0xBEEF));
+        uint256 gid = giftPacks.buyGift{value: 1 ether}(poolId, address(0), address(0xBEEF), type(uint256).max);
         assertEq(before - alice.balance, q);
         vm.prank(alice);
         giftPacks.reclaim(gid);
@@ -524,7 +536,7 @@ contract CoreTest is Test {
         assertEq(cata.balanceOf(DEAD), 1000 ether);
 
         vm.prank(bob);
-        treasury.buyback(address(usdt), 10e18, 0);
+        treasury.buyback(address(usdt), 10e18, 10_000e18);
         assertEq(cata.balanceOf(DEAD), 1000 ether + 10_000e18);
         assertEq(usdt.balanceOf(address(treasury)), 0);
 
@@ -541,7 +553,7 @@ contract CoreTest is Test {
         cata.mint(address(router), 1e30);
         vm.deal(address(treasury), 1 ether);
         vm.prank(owner);
-        treasury.buyback(address(0), 1 ether, 0);
+        treasury.buyback(address(0), 1 ether, 1000 ether);
         assertEq(cata.balanceOf(DEAD), 900 ether);
         assertEq(cata.balanceOf(address(points)), 100 ether);
     }
