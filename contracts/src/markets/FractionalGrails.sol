@@ -83,6 +83,11 @@ contract FractionalGrails is CataPayments, IERC721Receiver {
     function setReserve(uint256 id, uint256 reservePrice) external onlyOperator {
         Grail storage g = grails[id];
         if (g.status != Status.SELLING || reservePrice == 0) revert BadState();
+        // once any share is sold, the reserve may only go up: lowering it would let the operator
+        // buy the card out cheaply and dilute share holders' redemption value
+        if (reservePrice < g.reservePrice && g.shares.balanceOf(address(this)) < g.shares.totalSupply()) {
+            revert BelowReserve();
+        }
         g.reservePrice = reservePrice;
         emit ReserveSet(id, reservePrice);
     }

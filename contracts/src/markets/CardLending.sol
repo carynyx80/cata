@@ -194,7 +194,9 @@ contract CardLending is CataPayments, IERC721Receiver {
         Loan storage l = loans[tokenId];
         if (!l.active) return false;
         if (block.timestamp > l.due) return true;
-        (uint256 value,) = collateralValue(tokenId, l.token);
+        (uint256 value, uint256 upd) = collateralValue(tokenId, l.token);
+        // never price-liquidate on a stale index/feed value (overdue loans stay liquidatable above)
+        if (block.timestamp > upd + maxPriceAge) return false;
         return debtOf(tokenId) * BPS > value * liqThresholdBps;
     }
 

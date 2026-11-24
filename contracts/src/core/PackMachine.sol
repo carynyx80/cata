@@ -77,6 +77,7 @@ contract PackMachine is CataPayments, IERC721Receiver {
     mapping(uint256 => address) public requestRecipient;
     mapping(uint256 => Pull) public pulls; // tokenId => last pull
     mapping(address => mapping(address => uint256)) public owed; // token => account => amount
+    mapping(uint256 => uint256) public pendingOpens; // poolId => VRF requests in flight
 
     event PoolCreated(uint256 indexed poolId, string name, uint256 priceUsd);
     event PoolUpdated(uint256 indexed poolId, uint256 priceUsd, bool active);
@@ -104,6 +105,8 @@ contract PackMachine is CataPayments, IERC721Receiver {
     error InsufficientReserve();
     error Reserved();
     error NotOperator();
+    error OpenPending();
+    error BadRecipient();
 
     constructor(
         ICataConfig config_,
@@ -246,6 +249,7 @@ contract PackMachine is CataPayments, IERC721Receiver {
             revert NotDepositor();
         }
         if (available(poolId) == 0) revert Reserved();
+        if (pendingOpens[poolId] != 0) revert OpenPending();
         uint256[] storage cards = _poolCards[poolId];
         for (uint256 i; i < cards.length; ++i) {
             if (cards[i] == tokenId) {
@@ -258,6 +262,8 @@ contract PackMachine is CataPayments, IERC721Receiver {
     }
 
     function _addCard(uint256 poolId, uint256 tokenId, address depositor, uint256 ask) internal {
+        // pool composition must not change while a VRF request is in flight (would make the pull manipulable)
+        if (pendingOpens[poolId] != 0) revert OpenPending();
         vault.transferFrom(msg.sender, address(this), tokenId);
         _poolCards[poolId].push(tokenId);
         poolOfToken[tokenId] = poolId + 1;
@@ -340,7 +346,10 @@ contract PackMachine is CataPayments, IERC721Receiver {
     function _openCredit(uint256 creditId, address recipient) internal returns (uint256 requestId) {
         Credit storage c = _credits[creditId];
         if (c.used) revert CreditUsed();
+        // a zero recipient would make the VRF callback revert, bricking the reserved card forever
+        if (recipient == address(0)) revert BadRecipient();
         c.used = true;
+        pendingOpens[c.poolId] += 1;
         requestId = coordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: keyHash,
@@ -369,6 +378,7 @@ contract PackMachine is CataPayments, IERC721Receiver {
         uint256[] storage cards = _poolCards[c.poolId];
         uint256 tokenId = _removeAt(c.poolId, randomWords[0] % cards.length);
         _pools[c.poolId].reserved -= 1;
+        pendingOpens[c.poolId] -= 1;
 
         Stock memory s = stockOf[tokenId];
         delete stockOf[tokenId];
