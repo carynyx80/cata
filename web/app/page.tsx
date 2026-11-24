@@ -22,7 +22,7 @@ export default function Home() {
   return (
     <>
       {/* hero */}
-      <section className="mx-auto grid max-w-7xl items-center gap-12 px-4 pb-24 pt-16 md:px-8 lg:grid-cols-[1.1fr_1fr] lg:pt-24">
+      <section className="mx-auto grid max-w-7xl items-center gap-6 px-4 sm:gap-12 pb-16 pt-10 sm:pt-16 md:px-8 lg:pb-24 lg:grid-cols-[1.1fr_1fr] lg:pt-24">
         <div>
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .5 }}
             className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-surface px-3 py-1 font-mono text-[11px] text-muted">
@@ -37,32 +37,34 @@ export default function Home() {
               transition={{ duration: .8, delay: .3, ease: [0.22, 1, 0.36, 1] }}>real.</motion.span>
           </h1>
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .5, duration: .6 }}
-            className="mt-6 max-w-md text-xl text-muted md:text-2xl">rip it. flip it. bet on it. borrow on it. ship it.</motion.p>
+            className="mt-5 max-w-md text-lg text-muted sm:mt-6 sm:text-xl md:text-2xl">rip it. flip it. bet on it. borrow on it. ship it.</motion.p>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .6, duration: .6 }}
-            className="mt-10 flex flex-wrap gap-3">
-            <Link href="/packs" className="group rounded-full bg-pink px-7 py-4 text-lg font-medium text-surface shadow-[0_12px_30px_-10px_#E2487F] transition-all hover:-translate-y-0.5 hover:bg-deep">
+            className="mt-8 flex flex-wrap gap-3 sm:mt-10">
+            <Link href="/packs" className="group rounded-full bg-pink px-6 py-3 text-base font-medium sm:px-7 sm:py-4 sm:text-lg text-surface shadow-[0_12px_30px_-10px_#E2487F] transition-all hover:-translate-y-0.5 hover:bg-deep">
               open a pack <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
             </Link>
-            <Link href="/catalog" className="rounded-full border-2 border-ink px-7 py-4 text-lg font-medium transition-all hover:-translate-y-0.5 hover:bg-ink hover:text-surface">
+            <Link href="/catalog" className="rounded-full border-2 border-ink px-6 py-3 text-base font-medium sm:px-7 sm:py-4 sm:text-lg transition-all hover:-translate-y-0.5 hover:bg-ink hover:text-surface">
               browse every card
             </Link>
           </motion.div>
-          <div className="mt-12 flex gap-10 font-mono text-sm">
-            {[["12,480", "slabs vaulted"], ["85%", "instant buyback"], ["0.2%", "to $cata burn"]].map(([n, l]) => (
-              <div key={l}><div className="text-2xl text-ink">{n}</div><div className="text-[11px] text-muted">{l}</div></div>
+          <div className="mt-8 flex gap-6 font-mono text-sm sm:mt-12 sm:gap-10">
+            {[["every card", "4 games + sports"], ["85%", "instant buyback"], ["0.2%", "to $cata burn"]].map(([n, l]) => (
+              <div key={l}><div className="text-lg text-ink sm:text-2xl">{n}</div><div className="text-[11px] text-muted">{l}</div></div>
             ))}
           </div>
         </div>
-        <div className="relative mx-auto h-[420px] w-full max-w-[520px] -mb-28 origin-top scale-[.72] sm:mb-0 sm:scale-100 sm:h-[520px]">
-          <div className="absolute inset-10 rounded-full bg-soft blur-3xl" />
-          {fan.map(({ c, r, x, y, z }, i) => (
-            <motion.div key={c.id} className="absolute left-[calc(50%-115px)] top-4 w-[230px]" style={{ zIndex: z }}
-              initial={{ opacity: 0, y: 120, rotate: 0, x: 0 }}
-              animate={{ opacity: 1, y, rotate: r, x }}
-              transition={{ type: "spring", stiffness: 70, damping: 14, delay: .3 + i * .12 }}>
-              <Slab card={c} />
-            </motion.div>
-          ))}
+        <div className="relative mx-auto h-[300px] w-full max-w-[520px] sm:h-[520px]">
+          <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 origin-top scale-[.56] sm:scale-100">
+            <div className="absolute inset-10 rounded-full bg-soft blur-3xl" />
+            {fan.map(({ c, r, x, y, z }, i) => (
+              <motion.div key={c.id} className="absolute left-[calc(50%-115px)] top-4 w-[230px]" style={{ zIndex: z }}
+                initial={{ opacity: 0, y: 120, rotate: 0, x: 0 }}
+                animate={{ opacity: 1, y, rotate: r, x }}
+                transition={{ type: "spring", stiffness: 70, damping: 14, delay: .3 + i * .12 }}>
+                <Slab card={c} />
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 

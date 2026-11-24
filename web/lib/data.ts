@@ -16,3 +16,35 @@ export const cards: Card[] = [
 ];
 
 export const fmt = (n: number) => "$" + n.toLocaleString("en-US");
+
+export const games = ["pokémon", "magic", "yu-gi-oh", "one piece", "sports"] as const;
+export type Game = (typeof games)[number];
+
+export type CatalogCard = Card & { game: Game; raw: number; psa9: number; psa10: number; wants: number; inVault: boolean; history: number[] };
+
+const meta: Record<string, { game: Game; raw: number; psa9: number; psa10: number; wants: number; inVault: boolean }> = {
+  "1": { game: "pokémon", raw: 520, psa9: 4200, psa10: 21500, wants: 1284, inVault: true },
+  "2": { game: "pokémon", raw: 610, psa9: 980, psa10: 1650, wants: 902, inVault: true },
+  "3": { game: "one piece", raw: 45, psa9: 120, psa10: 310, wants: 211, inVault: false },
+  "4": { game: "sports", raw: 140, psa9: 360, psa10: 890, wants: 640, inVault: true },
+  "5": { game: "pokémon", raw: 3100, psa9: 48000, psa10: 210000, wants: 3022, inVault: false },
+  "6": { game: "yu-gi-oh", raw: 380, psa9: 4100, psa10: 9900, wants: 455, inVault: false },
+  "7": { game: "magic", raw: 3900, psa9: 26000, psa10: 61000, wants: 1720, inVault: true },
+  "8": { game: "pokémon", raw: 290, psa9: 1280, psa10: 5400, wants: 388, inVault: false },
+};
+
+function series(seed: number, base: number) {
+  const out: number[] = [];
+  let v = base * 0.78;
+  for (let i = 0; i < 12; i++) {
+    const r = Math.sin(seed * 9.1 + i * 1.7) * 0.07 + 0.025;
+    v = Math.max(base * 0.4, v * (1 + r));
+    out.push(Math.round(v));
+  }
+  out[11] = base;
+  return out;
+}
+
+export const catalog: CatalogCard[] = cards.map((c, i) => ({ ...c, ...meta[c.id], history: series(i + 1, c.value) }));
+export const getCard = (id: string) => catalog.find((c) => c.id === id);
+export const months = ["dec", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov"];
