@@ -13,6 +13,7 @@ export interface PoolView {
   priceUsd: number | null;
   price?: { raw: string; payToken: string };
   active: boolean;
+  reserved?: number;
   source: "chain" | "sample";
   cardsLeft: number;
   grailsLeft: number;
@@ -53,20 +54,21 @@ function enrich(repo: Repo, def: Omit<PoolDef, "cards"> & { cards: { cardId: str
   };
 }
 
-const USDT = "0x55d398326f99059ff775485246999027b3197955";
-
 export async function listPools(repo: Repo, chain: ChainReader): Promise<PoolView[]> {
   let onchain = null;
   try { onchain = await chain.pools(); } catch (e) { console.warn("pool read failed, serving samples:", (e as Error).message); }
   if (!onchain) return SAMPLE_POOLS.map((p) => enrich(repo, p, { source: "sample", active: true }));
   const rev = reverseCatalogIds(repo);
   return onchain.map((p) => {
-    const cards = p.contents.map((c) => {
+    const counts = new Map<string, { cardId: string; grade: Grade; count: number; catalogId: Hex }>();
+    for (const c of p.cards) {
       const k = rev.get(c.catalogId);
-      return { cardId: k?.cardId ?? `unknown:${c.catalogId}`, grade: k?.grade ?? ("raw" as Grade), count: c.remaining, catalogId: c.catalogId };
-    });
-    const isUsdt = p.payToken.toLowerCase() === USDT;
-    return enrich(repo, { id: String(p.id), name: p.name, game: "mixed", priceUsd: isUsdt ? Number(formatUnits(p.price, 18)) : 0, grailThresholdUsd: 1000, cards },
-      { source: "chain", active: p.active, price: { raw: p.price.toString(), payToken: p.payToken }, ...(isUsdt ? {} : { priceUsd: null }) });
+      const e = counts.get(c.catalogId) ?? { cardId: k?.cardId ?? `unknown:${c.catalogId}`, grade: k?.grade ?? ("raw" as Grade), count: 0, catalogId: c.catalogId };
+      e.count++;
+      counts.set(c.catalogId, e);
+    }
+    const priceUsd = Number(formatUnits(p.priceUsd18, 18));
+    return enrich(repo, { id: String(p.id), name: p.name, game: "mixed", priceUsd, grailThresholdUsd: Math.max(1000, priceUsd * 10), cards: [...counts.values()] },
+      { source: "chain", active: p.active, reserved: p.reserved, price: { raw: p.priceUsd18.toString(), payToken: "USD (18 decimals)" } });
   });
 }

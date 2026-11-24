@@ -18,6 +18,8 @@ export function env() {
     rpcConfigured: !!e.RPC_URL,
     oracleKey: e.ORACLE_PRIVATE_KEY || null,
     cataToken: addr(e.CATA_TOKEN),
+    vaultDeployBlock: BigInt(e.VAULT_DEPLOY_BLOCK || 0),
+    vaultLogChunk: BigInt(e.VAULT_LOG_CHUNK || 5000),
     contracts: {
       cataConfig: addr(e.CATA_CONFIG_ADDRESS),
       vault: addr(e.CATA_VAULT_ADDRESS),

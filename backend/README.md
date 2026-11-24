@@ -47,7 +47,8 @@ Errors always look like `{ "error": { "code", "message", "details?" } }`. CORS i
 - `catalogId = keccak256(utf8(cardId + ":" + grade))`, with grade one of `raw | psa9 | psa10` (`src/catalogId.ts`).
 - Prices are USD scaled to 18 decimals.
 - `src/jobs/pushPrices.ts` builds `setPrices(bytes32[],uint256[])` batches (100 per tx) with viem `encodeFunctionData`. It only sends with `--send` **and** `ORACLE_PRIVATE_KEY` + `RPC_URL` + `CATA_PRICE_INDEX_ADDRESS` all set. Otherwise it prints a dry run.
-- The contract read ABIs the backend expects are in `src/chain.ts` (`ABIS`). Keep them in sync with `contracts/`.
+- ABIs in `src/abis/` are generated from `contracts/out` (forge build) by `npm run gen:abis`. Reads: `CataConfig.cataToken/feeBps`, `CataPoints.points(address)`, `PackMachine.poolCount/pools(id) -> Pool{name,priceUsd,active,reserved}/poolCards(id) -> tokenIds`, `CataVault.catalogIdOf(tokenId)` (multicall), `CataPriceIndex.priceUsd/setPrices`.
+- CataVault is not ERC721Enumerable: wallet holdings are rebuilt from `Transfer` logs since `VAULT_DEPLOY_BLOCK` (chunks of `VAULT_LOG_CHUNK`, default 5000) and confirmed with `ownerOf`. Pools need both `PACK_MACHINE_ADDRESS` and `CATA_VAULT_ADDRESS`.
 
 ## Ingestion (`src/ingest/`)
 

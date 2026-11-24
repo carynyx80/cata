@@ -86,9 +86,11 @@ export function createApp(deps: AppDeps) {
     const e = getEnv();
     let cataToken: Address | null = null;
     let source: "chain" | "env" | "chain_error" = "env";
+    let feeBps = 20;
     if (e.contracts.cataConfig) {
       try {
-        const t = await chain.cataToken();
+        const [t, fee] = await Promise.all([chain.cataToken(), chain.feeBps()]);
+        if (fee !== null) feeBps = fee;
         cataToken = t && t !== zeroAddress ? t : null;
         source = "chain";
       } catch (err) {
@@ -105,7 +107,7 @@ export function createApp(deps: AppDeps) {
       cataToken,
       cataActive: cataToken !== null,
       cataTokenSource: source,
-      feeBps: 20,
+      feeBps,
       sellbackBps: 8500,
       paymentTokens: ["BNB", "USDT", ...(cataToken ? ["CATA"] : [])],
       features: {

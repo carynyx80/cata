@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "ingest": "tsx src/ingest/run.ts",
-    "push-prices": "tsx src/jobs/pushPrices.ts"
+    "push-prices": "tsx src/jobs/pushPrices.ts",
+    "gen:abis": "node scripts/gen-abis.mjs"
   },
   "keywords": [],
   "author": "",
