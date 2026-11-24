@@ -39,7 +39,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body className="min-h-dvh">
         <Providers>
-          <a href="#main" className="skip-link">skip to content</a>
+          <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[100] focus:rounded-full focus:bg-[#2B1A22] focus:px-5 focus:py-3 focus:text-[15px] focus:text-[#FBF6EE]">skip to content</a>
           <Nav />
           <main id="main" className="overflow-x-clip">{children}</main>
           <Footer />
